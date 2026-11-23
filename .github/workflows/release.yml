@@ -250,3 +250,47 @@ jobs:
             --generate-notes \
             "${EXTRA[@]}"
           echo "发布完成：$TAG" >> "$GITHUB_STEP_SUMMARY"
+
+  site:
+    name: 更新宣传页
+    needs: [validate, release]
+    # 草稿不算发布：草稿态不部署，等人工发布后再跑一次「宣传页」工作流
+    if: ${{ inputs.create_release && !inputs.draft }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # 更新日志按标签区间汇总，需要完整历史
+          fetch-depth: 0
+
+      - uses: actions/configure-pages@v5
+
+      - name: 生成宣传页
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 site/build.py --out _site
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - id: deploy
+        uses: actions/deploy-pages@v4
+
+      - name: 写入汇总
+        shell: bash
+        env:
+          VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          {
+            echo "## 宣传页已更新"
+            echo ""
+            echo "版本 \`v$VERSION\` 的下载入口与更新日志已同步到 GitHub Pages。"
+          } >> "$GITHUB_STEP_SUMMARY"

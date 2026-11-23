@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{TITLE}}</title>
+<meta name="description" content="{{DESC}}">
+<meta name="theme-color" content="#0b0d10">
+<meta property="og:type" content="website">
+<meta property="og:title" content="{{TITLE}}">
+<meta property="og:description" content="{{DESC}}">
+<meta property="og:image" content="assets/hero.svg">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="nav">
+  <div class="wrap">
+    <a class="brand" href="#top">{{LOGO}}<span>驻匣</span><span class="en">ZHU XIA</span></a>
+    <nav>
+      <a href="#features">功能</a>
+      <a href="#shots">界面</a>
+      <a href="#download">下载</a>
+      <a href="#changelog">更新日志</a>
+      <a class="gh" href="{{REPO}}" target="_blank" rel="noopener">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main id="top">
+
+  <section class="hero">
+    <div class="wrap">
+      <div class="hero-copy">
+        <div class="badge {{CHANNEL_CLASS}}"><i></i>v{{VERSION}} · {{CHANNEL}}</div>
+        <h1>一个常驻进程，<br>接管 Windows 上<em>所有高频小工具</em></h1>
+        <p class="sub">{{SUB}}</p>
+        <div class="cta">
+          <a class="btn primary" href="#download">立即下载</a>
+          <a class="btn ghost" href="{{REPO}}" target="_blank" rel="noopener">查看源码</a>
+        </div>
+        <ul class="stats">{{STATS}}</ul>
+      </div>
+      <div class="hero-art">
+        <img src="assets/hero.svg" alt="任务栏系统监视与按进程网速示意" width="560" height="300">
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="features">
+    <div class="wrap">
+      <h2>八件事，一个进程</h2>
+      <p class="lead">每个模块都能单独开关；不开的模块不占线程、不占内存。常驻部分只有采样与绘制，设置面板按需启动。</p>
+      <div class="grid features">{{FEATURES}}</div>
+    </div>
+  </section>
+
+  <section class="section" id="shots">
+    <div class="wrap">
+      <h2>界面长这样</h2>
+      <p class="lead">原生绘制，没有一层网页壳。下面是按真实布局与配色生成的界面示意。</p>
+      <div class="grid shots">{{SHOTS}}</div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wrap">
+      <div class="highlights">{{HIGHLIGHTS}}</div>
+    </div>
+  </section>
+
+  <section class="section" id="download">
+    <div class="wrap">
+      <h2>下载</h2>
+      <p class="lead">Windows 10 / 11 x64 · 免安装 · 解压即用。正式版与预览版分开提供，预览版可能带有尚未稳定的新功能。</p>
+      <div class="grid downloads">{{DOWNLOADS}}</div>
+      <p class="fineprint">全部版本见 <a href="{{RELEASES}}" target="_blank" rel="noopener">GitHub Releases</a>；源码包与 SHA256 校验和随每个版本一并发布。许可证 Apache-2.0，第三方组件声明见仓库 THIRD_PARTY_NOTICES.md。</p>
+    </div>
+  </section>
+
+  <section class="section" id="changelog">
+    <div class="wrap">
+      <h2>更新日志</h2>
+      <p class="lead">由 git 提交历史按版本自动汇总，发布即更新。</p>
+      <ol class="timeline">{{CHANGELOG}}</ol>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>驻匣 Zhuxia · Apache License 2.0</span>
+    <span>页面生成于 {{BUILT_AT}}</span>
+    <div class="links">
+      <a href="{{REPO}}" target="_blank" rel="noopener">GitHub</a>
+      <a href="{{RELEASES}}" target="_blank" rel="noopener">Releases</a>
+      <a href="{{REPO}}/blob/main/THIRD_PARTY_NOTICES.md" target="_blank" rel="noopener">第三方声明</a>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

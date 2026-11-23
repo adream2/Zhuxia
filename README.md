@@ -33,6 +33,7 @@ Windows 桌面常驻小工具集合：一个后台进程提供系统监视、剪
 ## 文档
 
 - 技术架构：`docs/ARCHITECTURE.md`；各模块说明：`docs/` 下对应文件。
+- 宣传页与自动化：`site/README.md`（页面由发布流程自动重建并部署到 GitHub Pages）。
 - 第三方组件与许可证声明：`THIRD_PARTY_NOTICES.md`。
 
 ## 许可

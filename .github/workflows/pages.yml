@@ -1,0 +1,68 @@
+name: 宣传页
+
+# 独立于发布流程的入口：
+#   · workflow_dispatch —— 首次上线、或改了站点代码想立刻看效果
+#   · push 到 main 且改动落在 site/ 下 —— 设计/文案调整自动重新部署
+#
+# 为什么不用 `on: release: published`：release.yml 里的 Release 是用默认 GITHUB_TOKEN
+# 创建的，而 GitHub 不会因为 GITHUB_TOKEN 的动作再触发另一个 workflow。所以「发布后
+# 更新宣传页」这一步放在 release.yml 内部完成（见那边的 site job），这里只负责手动/改动触发。
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+      - ".github/workflows/pages.yml"
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Pages 同一时间只允许一个部署
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: 生成站点
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # 更新日志要用到全部标签与提交历史
+          fetch-depth: 0
+
+      - uses: actions/configure-pages@v5
+
+      - name: 生成 _site
+        env:
+          # 读发布列表与资源链接（公开仓库只读即可）
+          GH_TOKEN: ${{ github.token }}
+        run: python3 site/build.py --out _site
+
+      - name: 检查产物
+        run: |
+          set -euo pipefail
+          test -f _site/index.html
+          test -f _site/style.css
+          test -f _site/assets/hero.svg
+          echo "产物大小：$(du -sh _site | cut -f1)"
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    name: 部署到 Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4

@@ -1,6 +1,8 @@
 # 构建产物
 /target/
 /crates/zhuxia/gen/
+/site/_site/
+/_site/
 
 # 本地参考源码（第三方项目快照，不随仓库分发）
 /_ref/
