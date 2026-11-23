@@ -8,6 +8,8 @@
 /_ref/
 
 # 开发/测试临时文件
+__pycache__/
+*.pyc
 /_smoke/
 /_shot.png
 *.log

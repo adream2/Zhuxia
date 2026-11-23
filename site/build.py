@@ -13,7 +13,8 @@ robots.txt、sitemap.xml、llms.txt、feed.xml、site.webmanifest。
 
 用法：
   python3 site/build.py [--out _site]
-  SITE_URL=https://example.com/ python3 site/build.py     # 显式指定站点根地址
+  SITE_DOMAIN=zhuxia.ztsite.com python3 site/build.py     # 绑了自定义域名（CI 里就这么传）
+  SITE_URL=https://example.com/ python3 site/build.py     # 显式指定站点根地址（带协议）
 """
 
 from __future__ import annotations
@@ -29,6 +30,7 @@ import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -80,16 +82,61 @@ def repo_slug() -> str:
 def site_url(slug: str) -> str:
     """站点根地址（带结尾斜杠）。canonical / og:url / sitemap 都要绝对地址。
 
-    优先级：SITE_URL 环境变量（CI 里由 configure-pages 的 base_url 传进来）
-    → GitHub Pages 项目页默认地址。
+    优先级：
+      1. `SITE_DOMAIN`（自定义域名，如 `zhuxia.ztsite.com`）——绑了域名就一定用它：
+         GitHub 会把 `*.github.io/<repo>/` 301 到自定义域名，canonical 指过去才算规范；
+      2. `SITE_URL`（带协议的完整地址，本地调试/特殊场景用）；
+      3. GitHub Pages 归一化地址：用户页 `owner.github.io`、项目页 `owner.github.io/repo`。
+    非 http(s) 的值一律当无效（CI 里 configure-pages 取不到配置时会给出空串或 "/"，
+    照抄会把整页的相对地址变成 "/"，比直接回退到推断值更糟）。
     """
+    raw = os.environ.get("SITE_DOMAIN", "").strip()
+    if raw:
+        host = (urlsplit(raw if "://" in raw else "https://" + raw).hostname or "").lower()
+        if host:
+            return f"https://{host}/"
+
     env = os.environ.get("SITE_URL", "").strip()
-    if env:
+    if env.startswith(("http://", "https://")):
         return env if env.endswith("/") else env + "/"
+
     owner, _, name = slug.partition("/")
     if name.lower() == f"{owner.lower()}.github.io":
         return f"https://{owner}.github.io/"
     return f"https://{owner.lower()}.github.io/{name}/"
+
+
+def custom_domain(site: str) -> str:
+    """站点地址里的自定义域名；还是 `*.github.io` 就返回空串（说明没绑域名）。"""
+    host = (urlsplit(site).hostname or "").lower()
+    if not host or host.endswith(".github.io"):
+        return ""
+    return host
+
+
+def check_pages_host(domain: str) -> None:
+    """CI 里拿 configure-pages 读到的 host 跟声明的域名对账。
+
+    为什么要硬失败：canonical 用 `SITE_DOMAIN` 拼，实际访问域名来自仓库
+    Settings → Pages；两边一旦不同，搜索引擎看到的地址就不是用户打开的地址。
+    域名还没在 Pages 设置里生效（读到 `*.github.io`）只告警——那是刚绑域名的
+    过渡态，等设置生效后下一次部署自然对齐。
+    """
+    host = os.environ.get("PAGES_HOST", "").strip().lower()
+    if not host or not domain:
+        return
+    if host.endswith(".github.io"):
+        print(
+            f"警告：Settings → Pages 里的自定义域名还没生效（读到 {host}），"
+            f"产物仍按 {domain} 生成",
+            file=sys.stderr,
+        )
+        return
+    if host != domain:
+        raise SystemExit(
+            f"域名不一致：工作流 SITE_DOMAIN={domain}，Settings → Pages 的域名={host}。\n"
+            "改成同一个再部署，否则 canonical 与实际访问域名对不上。"
+        )
 
 
 def parse_version(tag: str) -> tuple[int, int, int] | None:
@@ -614,6 +661,7 @@ def main() -> int:
     version = workspace_version()
     slug = repo_slug()
     site = site_url(slug)
+    check_pages_host(custom_domain(site))
     repo = f"https://github.com/{slug}"
     releases = collect_releases(slug)
     ver_tuple = parse_version(version) or (0, 0, 0)
@@ -636,6 +684,12 @@ def main() -> int:
     shots_dir.mkdir(parents=True, exist_ok=True)
     for png in (SITE / "shots").glob("*.png"):
         shutil.copyfile(png, shots_dir / png.name)
+
+    # 打赏二维码：不是脚本生成的图，原样搬过去（文件名统一小写，Linux CI 区分大小写）
+    pay_dir = out / "pay"
+    pay_dir.mkdir(parents=True, exist_ok=True)
+    for png in (SITE / "pay").glob("*.png"):
+        shutil.copyfile(png, pay_dir / png.name)
     art.og_image(ICONS / "png" / "zhuxia-1024.png", out / "assets" / "og.png")
     copy_icons(out)
     shutil.copyfile(SITE / "style.css", out / "style.css")
@@ -677,7 +731,16 @@ def main() -> int:
         raise SystemExit(f"模板里还有未替换的占位符：{sorted(set(leftover))}")
 
     (out / "index.html").write_text(page, encoding="utf-8")
-    verify(out)
+
+    # CNAME：绑了自定义域名就写一份进产物。
+    # 用 Actions 发布时 GitHub **忽略**这个文件（域名存在仓库 Settings → Pages 里），
+    # 它不会让域名"丢"或"变"；写它有两个用处：产物自带域名记录、将来若改成
+    # 「从分支发布」也不用再补。没绑域名（*.github.io）时不写，免得 fork 出去乱指。
+    domain = custom_domain(site)
+    if domain:
+        (out / "CNAME").write_text(domain + "\n", encoding="utf-8", newline="\n")
+
+    verify(out, site=site)
     print(f"已生成 {out / 'index.html'}（版本 {version} / {channel}，{len(releases)} 个发布，站点 {site}）")
     return 0
 
@@ -698,23 +761,49 @@ REQUIRED = [
     "assets/icon-64.png",
     "assets/icon-256.png",
     "assets/icon-512.png",
+    # 打赏二维码（站点唯一的"非生成图"）
+    "pay/wechat.png",
+    "pay/alipay.png",
 ]
 
 
-def verify(out: Path) -> None:
+def verify(out: Path, site: str = "") -> None:
+    domain = custom_domain(site)
     need = REQUIRED + [
         f"shots/{name}.png" for name in ("capture", "appearance", "about", "taskbar")
     ]
+    if domain:
+        need.append("CNAME")
     missing = [f for f in need if not (out / f).is_file()]
     if missing:
         raise SystemExit(f"产物缺失 {len(missing)} 个：{', '.join(missing)}")
     empty = [f for f in need if (out / f).stat().st_size == 0]
     if empty:
         raise SystemExit(f"产物是空文件：{', '.join(empty)}")
+
+    # CNAME 只能有域名本身：带协议、带路径、带换行以外的字符都会被 GitHub 判无效
+    if domain:
+        cname = (out / "CNAME").read_text(encoding="utf-8").strip()
+        if cname != domain:
+            raise SystemExit(f"CNAME 内容不对：{cname!r}，应为 {domain!r}")
+
     page = (out / "index.html").read_text(encoding="utf-8")
     left = sorted(set(re.findall(r"\{\{[A-Z_]+\}\}", page)))
     if left:
         raise SystemExit(f"模板占位符没替换：{' '.join(left)}")
+
+    # 绑了域名之后，页面里不该再出现 github.io：那是 301 前的旧地址，
+    # canonical / og:url / sitemap 指过去等于把权重让给一个跳转。
+    if domain:
+        stale = []
+        for name in ("index.html", "sitemap.xml", "robots.txt", "feed.xml", "llms.txt", "site.webmanifest"):
+            f = out / name
+            if f.is_file() and "github.io" in f.read_text(encoding="utf-8"):
+                stale.append(name)
+        if stale:
+            raise SystemExit(f"这些文件里还残留 github.io 的绝对地址：{', '.join(stale)}")
+        if site not in page:
+            raise SystemExit(f"index.html 里找不到站点地址 {site}（canonical / og:url 没跟上）")
 
 
 if __name__ == "__main__":

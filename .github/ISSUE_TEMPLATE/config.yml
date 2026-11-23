@@ -11,5 +11,5 @@ contact_links:
     url: https://github.com/adream2/Zhuxia/releases
     about: 反馈前先确认是不是已经在最新版本里修掉了。
   - name: 更新日志
-    url: https://adream2.github.io/Zhuxia/#changelog
+    url: https://zhuxia.ztsite.com/#changelog
     about: 每个版本改了什么，按提交历史自动汇总。

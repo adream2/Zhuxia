@@ -419,6 +419,80 @@ h1 em {
 .fineprint { color: var(--faint); font-size: 12.5px; margin: 18px 0 0; }
 .fineprint a { color: var(--dim); border-bottom: 1px dotted var(--border-strong); }
 
+/* ---------------------------------------------------------------- 打赏 */
+/* 低调的一整块：左文案右二维码，桌面并排、窄屏上下摞。
+   二维码本身带白底，压在深色页面上必须留白边，否则扫不出来。 */
+
+.support-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: clamp(20px, 3vw, 40px);
+  align-items: center;
+  padding: clamp(24px, 3.2vw, 36px);
+  border-radius: calc(var(--radius) + 6px);
+  border: 1px solid var(--border);
+  background:
+    radial-gradient(520px 220px at 0% 0%, rgba(46, 144, 250, 0.1), transparent 70%),
+    radial-gradient(520px 220px at 100% 0%, rgba(168, 85, 247, 0.1), transparent 70%),
+    var(--panel);
+}
+
+.support-copy .lead { margin-bottom: 16px; max-width: 54ch; }
+/* 栅格子项默认按 min-content 撑开，长句子会把整块顶出屏幕外 */
+.support-copy { min-width: 0; }
+
+.support-notes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 14px;
+  padding: 0;
+  list-style: none;
+}
+
+.support-notes li {
+  font-size: 12.5px;
+  color: var(--dim);
+  padding: 3px 11px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--panel-2);
+}
+
+.support-site { margin: 0; font-size: 13.5px; color: var(--dim); }
+.support-site a {
+  color: var(--text);
+  text-decoration: none;
+  border-bottom: 1px dotted var(--border-strong);
+}
+.support-site a:hover { border-bottom-color: var(--accent); }
+
+.qr-row { display: flex; gap: 14px; }
+
+.qr { margin: 0; width: 172px; display: flex; flex-direction: column; gap: 10px; }
+
+.qr img {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: #fff;          /* 二维码的静默区，别透明 */
+  padding: 8px;
+  border-radius: 12px;
+  border: 1px solid var(--border-strong);
+}
+
+.qr figcaption {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--dim);
+}
+.qr figcaption b { color: var(--text); font-weight: 600; }
+.qr figcaption span { color: var(--faint); font-size: 11.5px; }
+
 /* ---------------------------------------------------------------- 更新日志 */
 
 .timeline { list-style: none; margin: 0; padding: 0 0 0 22px; position: relative; }
@@ -482,6 +556,8 @@ footer a:hover { color: var(--text); }
   .hero-art { order: -1; }
   .nav nav a:not(.gh) { display: none; }
   .nav nav { gap: 4px; }
+  .support-card { grid-template-columns: 1fr; }
+  .qr-row { justify-content: flex-start; }
 }
 
 @media (max-width: 640px) {
@@ -497,6 +573,11 @@ footer a:hover { color: var(--text); }
   .section { padding: 40px 0; }
   .timeline { padding-left: 18px; }
   footer .links { margin-left: 0; }
+  /* 两个二维码按剩余宽度平分：写死 148px 会连卡片一起顶出屏幕；
+     上限 220px 免得在平板上放大成两张脸 */
+  .support-card { padding: 20px 16px; }
+  .qr-row { gap: 10px; }
+  .qr { width: auto; flex: 1 1 0; min-width: 0; max-width: 220px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

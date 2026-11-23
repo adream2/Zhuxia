@@ -276,7 +276,11 @@ jobs:
       - name: 生成宣传页
         env:
           GH_TOKEN: ${{ github.token }}
-          SITE_URL: ${{ steps.pages.outputs.base_url }}/
+          # 与 pages.yml 保持一致：自定义域名是绝对地址的唯一来源（页面的 canonical、
+          # sitemap、og:image 都按它拼）。改域名要同时改这两个工作流。
+          SITE_DOMAIN: zhuxia.ztsite.com
+          # 与 Settings → Pages 的实际域名对账（见 site/build.py 的 check_pages_host）
+          PAGES_HOST: ${{ steps.pages.outputs.host }}
         run: python3 site/build.py --out _site
 
       - uses: actions/upload-pages-artifact@v3

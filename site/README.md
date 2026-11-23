@@ -50,7 +50,49 @@ site/art.py      ─┘            └─▶ _site/assets/og.png
 2. 工作流权限用默认的 `GITHUB_TOKEN` 即可，不需要额外 Secret：
    - `pages: write` + `id-token: write` 用于部署；
    - `contents: read` 用于读发布列表。
-3. 首次部署后地址是 `https://<owner>.github.io/Zhuxia/`，要自定义域名就在 Pages 设置里加。
+3. 自定义域名（当前是 `zhuxia.ztsite.com`）见下一节，**域名本身不靠仓库文件生效**。
+
+## 自定义域名
+
+线上域名：**https://zhuxia.ztsite.com/**（`adream2.github.io/Zhuxia/` 会 301 过来）。
+
+域名有两个落点，别混：
+
+| 落点 | 位置 | 说明 |
+| --- | --- | --- |
+| 页面地址（生效的那份） | 仓库 **Settings → Pages → Custom domain** | 用 Actions 发布时 GitHub **忽略**产物里的 CNAME 文件，域名存在这里 |
+| DNS | 域名商后台 | `CNAME  zhuxia  →  adream2.github.io`（不要带仓库名） |
+
+所以"部署后域名丢失"在 Actions 发布下不会发生：部署只换产物，不碰 Pages 设置。
+真正会错的是**页面里的绝对地址**——那由 `SITE_DOMAIN` 决定。
+
+`SITE_DOMAIN` 写在工作流顶层（唯一来源）：
+
+```yaml
+env:
+  SITE_DOMAIN: zhuxia.ztsite.com
+```
+
+`.github/workflows/pages.yml` 和 `.github/workflows/release.yml` 的 site job 各有一份，
+**改域名要同时改这两处**。构建脚本据此产出：
+
+- `SITE_DOMAIN` 优先于 `configure-pages` 的 `base_url`：后者读的是 Pages 设置，
+  没保存成功时会给出 `github.io` 甚至空串，照抄就会把 canonical 指到跳转前的旧地址；
+- 产物根目录写一份 `CNAME`（纯域名、无协议、无斜杠）。Actions 发布下它被忽略，
+  留着是为了"万一改成从分支发布"不用再补；
+- 绑了域名后 `verify()` 会拦住两种情况：产物里还有 `github.io` 的绝对地址、
+  `CNAME` 内容不是纯域名。
+
+上线后自检（各返回 200 且内容为域名即正确）：
+
+```bash
+curl -s https://zhuxia.ztsite.com/ | grep -o 'rel="canonical" href="[^"]*"'
+curl -s https://zhuxia.ztsite.com/sitemap.xml | head -4
+curl -sI https://adream2.github.io/Zhuxia/ | grep -i location   # 应为 301 → 域名
+```
+
+HTTPS 证书由 GitHub 自动签发，Pages 设置里勾上 **Enforce HTTPS**；
+若域名刚解析好，证书可能要等几分钟到一小时。
 
 ## 本地预览
 
@@ -69,10 +111,14 @@ site/
   build.py        # 入口：取数据 → 生成素材 → 渲染 HTML
   art.py          # 只生成 og.png（标准库写 PNG）
   shots/          # 真机截图（见下节）
+  pay/            # 打赏二维码原图（wechat.png / alipay.png，400×400，原样拷进产物 pay/）
   content.py      # 文案与功能清单
   template.html   # 页面骨架（{{占位符}} 由 build.py 替换）
   style.css       # 样式
 ```
+
+`pay/` 是页面里唯一"不是生成出来的"图片目录：换收款码直接替换这两个文件即可，
+文件名保持小写（Linux CI 区分大小写），`verify()` 会检查它们在产物里存在且非空。
 
 ## SEO / GEO
 
@@ -108,9 +154,13 @@ GEO 的写法约定：每条 FAQ 都是「一句问 + 一段能直接摘走的�
 
 ## 站点根地址
 
-`SITE_URL` 环境变量决定 canonical / og:url / sitemap 里的绝对地址。CI 里由
-`configure-pages` 的 `base_url` 传入，换自定义域名后自动跟着变；本地缺省按
-`https://<owner>.github.io/<repo>/` 推断。
+`SITE_DOMAIN`（绑了自定义域名）> `SITE_URL`（带协议的完整地址）> 按仓库推断
+`https://<owner>.github.io/<repo>/`。它决定 canonical / og:url / og:image /
+sitemap / robots / feed / llms.txt 里的绝对地址，**只在这一个函数里推导**，
+各文件都只是把它拼进去，没有第二份硬编码。
+
+`SITE_URL` 只认 `http(s)://` 开头，别的值（空串、`/`）一律回退到推断值——
+CI 里 `configure-pages` 取不到配置时会给出这些值，照抄会把整页地址变成根路径。
 
 ## 界面截图（site/shots/）
 
