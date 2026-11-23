@@ -1,6 +1,6 @@
 # 宣传页（GitHub Pages）
 
-`site/` 是宣传页的全部源码：一个构建脚本 + 一份文案 + 一套 SVG 素材生成器。
+`site/` 是宣传页的全部源码：一个构建脚本 + 一份文案 + 一组真机截图。
 页面在发布时由 CI 自动重建并部署，日常不需要手工改 HTML。
 
 ## 触发方式
@@ -24,7 +24,8 @@
 Cargo.toml 版本号 ─┐
 gh api releases  ─┼─▶ site/build.py ─▶ _site/index.html ─▶ upload-pages-artifact ─▶ deploy-pages
 git log 提交历史 ─┤            │
-site/art.py      ─┘            └─▶ _site/assets/*.svg
+site/shots/*.png ─┘            ├─▶ _site/shots/*.png
+site/art.py      ─┘            └─▶ _site/assets/og.png
 ```
 
 - **版本号**：只读 `Cargo.toml` 的 `[workspace.package] version`，和 exe 的 VERSIONINFO、
@@ -35,9 +36,9 @@ site/art.py      ─┘            └─▶ _site/assets/*.svg
   `zhuxia-<版本>-win-x64.zip`；没有发布时显示「等待首次发布」占位。
 - **更新日志**：`git log <上一个标签>..<本标签> --no-merges --pretty=%s`，
   逐版本汇总提交标题。没有标签时退化成「开发中」条目，列出当前分支最近提交。
-- **视觉素材**：`site/art.py` 现场生成 SVG（任务栏监视条、截图编辑态、剪贴板面板、
-  设置面板）。之所以不用真机截图：CI 上抓 GUI 要拉起 WebView2、要有桌面会话，
-  失败一次整个发布就断了；按设计 token 画出来的矢量图确定性更强，版本一变素材跟着重建。
+- **界面截图**：`site/shots/*.png`，都是从真实进程里截的图（见下节）。
+  早先这里画过一套 SVG 示意图，好看但和实际界面对不上，已经全部删掉——
+  截图必须和软件长得一样，宁可朴素也别失真。
 - **文案**：`site/content.py`（功能清单、卖点、页脚），不随版本变化。
 - **页面**：`site/template.html` 骨架 + `site/style.css`，无外部字体与 CDN，
   响应式断点 960 / 640。
@@ -66,7 +67,8 @@ python -m http.server -d _site 8787   # 打开 http://127.0.0.1:8787/
 ```text
 site/
   build.py        # 入口：取数据 → 生成素材 → 渲染 HTML
-  art.py          # SVG 素材（与 app 的设计 token 对齐）
+  art.py          # 只生成 og.png（标准库写 PNG）
+  shots/          # 真机截图（见下节）
   content.py      # 文案与功能清单
   template.html   # 页面骨架（{{占位符}} 由 build.py 替换）
   style.css       # 样式
@@ -109,3 +111,30 @@ GEO 的写法约定：每条 FAQ 都是「一句问 + 一段能直接摘走的�
 `SITE_URL` 环境变量决定 canonical / og:url / sitemap 里的绝对地址。CI 里由
 `configure-pages` 的 `base_url` 传入，换自定义域名后自动跟着变；本地缺省按
 `https://<owner>.github.io/<repo>/` 推断。
+
+## 界面截图（site/shots/）
+
+| 文件 | 内容 |
+| --- | --- |
+| `capture.png` | 设置面板 · 截图工具页（首屏） |
+| `appearance.png` | 设置面板 · 外观设置页 |
+| `about.png` | 设置面板 · 关于与许可页 |
+| `taskbar.png` | 任务栏监视条（2× 放大） |
+
+这几张是**真机截图**，不是脚本画的。刷新办法（在装有本程序的 Windows 上）：
+
+```bash
+# 设置面板各页：打开后 5 秒内截图，裁剪到窗口区域
+zhuxia.exe --settings capture     # → capture.png
+zhuxia.exe --settings appearance  # → appearance.png
+zhuxia.exe --settings about       # → about.png
+
+# 任务栏条带：截任务栏左下角 232×56，再放大 2 倍
+```
+
+注意：`--settings` 依赖常驻进程存活，先确保驻匣在运行；窗口位置固定时裁剪矩形也是固定的
+（2560×1440 / 100% 缩放下为 `780,345,1770,1040`）。换分辨率就要重新量一次。
+
+为什么不在 CI 里自动截：抓 GUI 要拉起 WebView2、要有交互式桌面会话，失败一次整个
+发布就断了。所以截图文件随仓库提交，只有界面改动时才需要重截；其余内容（下载链接、
+更新日志、结构化数据、og 图）仍然全自动。

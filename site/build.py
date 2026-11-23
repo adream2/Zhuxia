@@ -24,6 +24,7 @@ import json
 import os
 import re
 import shutil
+import struct
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -231,18 +232,43 @@ def render_features() -> str:
     return "".join(out)
 
 
+def png_size(path: Path) -> tuple[int, int]:
+    """读 PNG 的 IHDR，给 img 补上真实宽高，避免加载时抖动。"""
+    head = path.read_bytes()[:24]
+    return struct.unpack(">II", head[16:24])
+
+
 def render_shots() -> str:
-    dims = {"capture": (900, 520), "clipboard": (540, 420), "settings": (540, 420)}
     out = []
-    for i, (key, title, desc) in enumerate(content.SHOTS):
-        cls = "shot wide" if i == 0 else "shot"
-        w, h = dims.get(key, (540, 420))
+    for key, title, desc in content.SHOTS:
+        w, h = png_size(SITE / "shots" / f"{key}.png")
+        # 任务栏条带只有 176×56，套一个浅色底衬托，不然在深色卡片里只剩一条细线
+        if key == "taskbar":
+            inner = (
+                f'<div class="tkbar"><img src="shots/{key}.png" alt="{esc(title)}：{esc(desc)}" '
+                f'width="{w}" height="{h}" loading="lazy" decoding="async"></div>'
+            )
+        else:
+            inner = (
+                f'<a href="shots/{key}.png" target="_blank" rel="noopener">'
+                f'<img src="shots/{key}.png" alt="{esc(title)}：{esc(desc)}" '
+                f'width="{w}" height="{h}" loading="lazy" decoding="async"></a>'
+            )
         out.append(
-            f'<figure class="{cls}"><img src="assets/{key}.svg" alt="{esc(title)}：{esc(desc)}" '
-            f'width="{w}" height="{h}" loading="lazy" decoding="async">'
+            f'<figure class="shot">{inner}'
             f"<figcaption><strong>{esc(title)}</strong><span>{esc(desc)}</span></figcaption></figure>"
         )
     return "".join(out)
+
+
+def render_hero() -> str:
+    """首屏就放一张真机截图，不再叠装饰条——叠上去会盖住窗口内容。"""
+    key, alt = content.HERO_SHOT
+    w, h = png_size(SITE / "shots" / f"{key}.png")
+    return (
+        f'<div class="hero-art"><img class="win" src="shots/{key}.png" '
+        f'alt="{esc(alt)}界面截图" width="{w}" height="{h}"></div>'
+    )
 
 
 def render_highlights() -> str:
@@ -604,9 +630,11 @@ def main() -> int:
                 pass
     (out / "assets").mkdir(parents=True, exist_ok=True)
 
-    # 视觉素材
-    for name in ("hero", "capture", "clipboard", "settings"):
-        (out / "assets" / f"{name}.svg").write_text(art.ART[name](), encoding="utf-8")
+    # 视觉素材：界面截图是真机截的（site/shots/），这里只生成分享图
+    shots_dir = out / "shots"
+    shots_dir.mkdir(parents=True, exist_ok=True)
+    for png in (SITE / "shots").glob("*.png"):
+        shutil.copyfile(png, shots_dir / png.name)
     art.og_image(ICONS / "png" / "zhuxia-1024.png", out / "assets" / "og.png")
     copy_icons(out)
     shutil.copyfile(SITE / "style.css", out / "style.css")
@@ -632,6 +660,7 @@ def main() -> int:
         "CHANNEL_CLASS": "stable" if channel == "正式版" else "",
         "STATS": render_stats(),
         "FEATURES": render_features(),
+        "HERO": render_hero(),
         "SHOTS": render_shots(),
         "HIGHLIGHTS": render_highlights(),
         "FAQ": render_faq(),

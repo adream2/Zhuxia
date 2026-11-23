@@ -133,7 +133,7 @@ img, svg { display: block; max-width: 100%; }
 
 .hero .wrap {
   display: grid;
-  grid-template-columns: minmax(0, 1.02fr) minmax(0, 0.98fr);
+  grid-template-columns: minmax(0, 0.94fr) minmax(0, 1.06fr);
   gap: clamp(28px, 4vw, 56px);
   align-items: center;
 }
@@ -237,16 +237,17 @@ h1 em {
 .stats b { font-size: 24px; font-weight: 800; letter-spacing: -0.01em; }
 .stats span { font-size: 12.5px; color: var(--faint); }
 
-.hero-art {
-  position: relative;
-  border-radius: 20px;
-  padding: 10px;
-  background: linear-gradient(160deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.02));
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow);
-}
+/* 首屏是真机截图：窗口 + 叠在左下角的任务栏监视条 */
+.hero-art { position: relative; }
 
-.hero-art img { width: 100%; height: auto; border-radius: 12px; }
+.hero-art .win {
+  width: 100%;
+  height: auto;
+  border-radius: 14px;
+  background: #f7f7f7;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 30px 70px -30px rgba(0, 0, 0, 0.95), 0 0 0 1px rgba(0, 0, 0, 0.4);
+}
 
 /* ---------------------------------------------------------------- 通用区块 */
 
@@ -313,10 +314,19 @@ h1 em {
 
 /* ---------------------------------------------------------------- 界面截图 */
 
-.shots { grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); align-items: start; }
+.shots { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); align-items: start; }
 
-/* 第一张是主界面，横跨整行；其余两张并排 */
-.shot.wide { grid-column: 1 / -1; }
+/* 任务栏条带：真实截图常驻在浅色底上，和深色页面对比出来才看得清 */
+.tkbar {
+  padding: 22px 16px;
+  text-align: center;
+  border-radius: 10px;
+  background: #f3f3f3;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+  line-height: 0;
+}
+
+.tkbar img { display: block; margin: 0 auto; width: 100%; max-width: 300px; height: auto; }
 
 .shot {
   border-radius: var(--radius);
@@ -327,7 +337,8 @@ h1 em {
 }
 
 .shot:hover { border-color: var(--border-strong); transform: translateY(-2px); }
-.shot img { width: 100%; height: auto; border-radius: 10px; }
+.shot a { display: block; border-radius: 10px; overflow: hidden; line-height: 0; }
+.shot img { width: 100%; height: auto; }
 .shot figcaption { padding: 12px 6px 4px; }
 .shot strong { display: block; font-size: 14.5px; margin-bottom: 2px; }
 .shot span { color: var(--faint); font-size: 13px; }
