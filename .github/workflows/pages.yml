@@ -50,10 +50,10 @@ jobs:
       - name: 检查产物
         run: |
           set -euo pipefail
-          test -f _site/index.html
-          test -f _site/style.css
-          test -f _site/assets/hero.svg
-          echo "产物大小：$(du -sh _site | cut -f1)"
+          # 完整清单由 site/build.py 的 verify() 自己校验（缺文件、空文件、未替换占位符都会直接失败），
+          # 这里只做一次可读的汇总，避免两处清单各写一份、改一处忘另一处。
+          echo "产物 $(find _site -type f | wc -l) 个文件，$(du -sh _site | cut -f1)"
+          ls _site
 
       - uses: actions/upload-pages-artifact@v3
         with:

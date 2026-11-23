@@ -406,7 +406,7 @@ def render_jsonld(version: str, site: str, slug: str, rel: list[dict]) -> str:
         "url": site,
         "downloadUrl": download_url(target, slug),
         "installUrl": f"{repo}/releases",
-        "screenshot": f"{site}assets/capture.svg",
+        "screenshot": f"{site}shots/capture.png",
         "image": f"{site}assets/og.png",
         "featureList": [f[1] for f in content.FEATURES],
         "offers": {
@@ -677,8 +677,44 @@ def main() -> int:
         raise SystemExit(f"模板里还有未替换的占位符：{sorted(set(leftover))}")
 
     (out / "index.html").write_text(page, encoding="utf-8")
+    verify(out)
     print(f"已生成 {out / 'index.html'}（版本 {version} / {channel}，{len(releases)} 个发布，站点 {site}）")
     return 0
+
+
+# 产物清单：构建完自己验一遍。这条检查以前写在 workflow 里，写死了 assets/hero.svg；
+# 换成真机截图后那个文件没了，CI 每次都在那儿失败。清单放在生成脚本里才不会再脱节。
+REQUIRED = [
+    "index.html",
+    "style.css",
+    "favicon.ico",
+    "site.webmanifest",
+    "robots.txt",
+    "sitemap.xml",
+    "llms.txt",
+    "feed.xml",
+    "assets/og.png",
+    "assets/icon-32.png",
+    "assets/icon-64.png",
+    "assets/icon-256.png",
+    "assets/icon-512.png",
+]
+
+
+def verify(out: Path) -> None:
+    need = REQUIRED + [
+        f"shots/{name}.png" for name in ("capture", "appearance", "about", "taskbar")
+    ]
+    missing = [f for f in need if not (out / f).is_file()]
+    if missing:
+        raise SystemExit(f"产物缺失 {len(missing)} 个：{', '.join(missing)}")
+    empty = [f for f in need if (out / f).stat().st_size == 0]
+    if empty:
+        raise SystemExit(f"产物是空文件：{', '.join(empty)}")
+    page = (out / "index.html").read_text(encoding="utf-8")
+    left = sorted(set(re.findall(r"\{\{[A-Z_]+\}\}", page)))
+    if left:
+        raise SystemExit(f"模板占位符没替换：{' '.join(left)}")
 
 
 if __name__ == "__main__":
