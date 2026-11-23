@@ -165,7 +165,7 @@ impl DxgiGrab {
                         out.buf[x] = 255;
                     }
                 }
-                let _ = self.context.Unmap(staging, 0);
+                self.context.Unmap(staging, 0);
                 true
             })();
             // 无论成功与否都必须还帧，否则下一次 AcquireNextFrame 会卡住

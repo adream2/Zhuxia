@@ -2382,12 +2382,11 @@ impl Ov {
                         return false;
                     }
                 }
-                k if k == b'G' as u16 => {
-                    if self.stage == Stage::Selected && self.sel_ok() {
+                k if k == b'G' as u16
+                    && self.stage == Stage::Selected && self.sel_ok() => {
                         self.start_record(Some(RecordFormat::Gif));
                         return false;
                     }
-                }
                 _ => {}
             }
         }

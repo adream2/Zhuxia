@@ -20,7 +20,7 @@ pub fn parse(data: &[u8]) -> Result<Link, IconError> {
     if data.len() < 0x4C {
         return Err(IconError::Corrupt("LNK 头过短".into()));
     }
-    if &data[4..20] != &[
+    if data[4..20] != [
         0x01, 0x14, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46,
     ] {
         return Err(IconError::Corrupt("LNK CLSID 不匹配".into()));
@@ -126,7 +126,7 @@ fn read_counted(data: &[u8], pos: &mut usize, unicode: bool) -> Option<String> {
         let s = data.get(*pos..*pos + need)?;
         *pos += need;
         Some(String::from_utf16_lossy(
-            &s.chunks_exact(2)
+            &s.as_chunks::<2>().0.iter()
                 .map(|c| u16::from_le_bytes([c[0], c[1]]))
                 .collect::<Vec<_>>(),
         ))

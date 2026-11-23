@@ -58,7 +58,7 @@ impl Frame {
 
     /// 全不透明（PNG 可省 alpha 通道）。
     pub fn opaque(&self) -> bool {
-        self.rgba.chunks_exact(4).all(|p| p[3] == 255)
+        self.rgba.as_chunks::<4>().0.iter().all(|p| p[3] == 255)
     }
 }
 
@@ -190,10 +190,10 @@ pub fn decode_png(data: &[u8], hint: &str) -> Result<Frame, IconError> {
     let px = &buf[..line * h as usize];
     let rgba = match info.color_type {
         png::ColorType::Rgba => px.to_vec(),
-        png::ColorType::Rgb => px.chunks_exact(3).flat_map(|p| [p[0], p[1], p[2], 255]).collect(),
+        png::ColorType::Rgb => px.as_chunks::<3>().0.iter().flat_map(|p| [p[0], p[1], p[2], 255]).collect(),
         png::ColorType::Grayscale => px.iter().flat_map(|g| [*g, *g, *g, 255]).collect(),
         png::ColorType::GrayscaleAlpha => {
-            px.chunks_exact(2).flat_map(|p| [p[0], p[0], p[0], p[1]]).collect()
+            px.as_chunks::<2>().0.iter().flat_map(|p| [p[0], p[0], p[0], p[1]]).collect()
         }
         png::ColorType::Indexed => {
             return Err(IconError::Corrupt(format!("{hint}：PNG 调色板未展开")));
@@ -262,7 +262,7 @@ pub fn raster_svg(data: &[u8], wanted: u32, hint: &str) -> Result<Frame, IconErr
     );
     let mut rgba = pixmap.data().to_vec();
     // tiny-skia 预乘 alpha，交出去之前反预乘，否则半透明边缘发黑。
-    for p in rgba.chunks_exact_mut(4) {
+    for p in rgba.as_chunks_mut::<4>().0 {
         let a = p[3] as u32;
         if a == 0 {
             p[0] = 0;
@@ -366,7 +366,7 @@ fn decode_file_gdiplus(path: &Path, hint: &str) -> Result<Frame, IconError> {
         let _ = GdipBitmapUnlockBits(dst, &mut bd);
         GdipDisposeImage(dst as *mut GpImage);
         GdipDisposeImage(img);
-        for p in rgba.chunks_exact_mut(4) {
+        for p in rgba.as_chunks_mut::<4>().0 {
             p.swap(0, 2);
         }
         let mut f = Frame::new(w, h, rgba, hint)?;
@@ -456,7 +456,7 @@ pub fn decode_dib(data: &[u8], is_icon: bool, hint: &str) -> Result<Frame, IconE
         None
     };
 
-    let stride = ((w as usize * bpp as usize + 31) / 32) * 4;
+    let stride = (w as usize * bpp as usize).div_ceil(32) * 4;
     let need = off + stride * h as usize;
     if data.len() < need {
         return Err(IconError::Corrupt(format!(
@@ -467,7 +467,7 @@ pub fn decode_dib(data: &[u8], is_icon: bool, hint: &str) -> Result<Frame, IconE
 
     // AND 掩码紧跟在像素之后；有些 ICO 省略它。
     let mask_off = need;
-    let mask_stride = ((w as usize + 31) / 32) * 4;
+    let mask_stride = (w as usize).div_ceil(32) * 4;
     let has_mask = is_icon && data.len() >= mask_off + mask_stride * h as usize;
 
     let mut rgba = vec![0u8; w as usize * h as usize * 4];
@@ -541,7 +541,7 @@ pub fn decode_dib(data: &[u8], is_icon: bool, hint: &str) -> Result<Frame, IconE
         }
     }
     if bpp == 32 && !any_alpha && !has_mask {
-        for p in rgba.chunks_exact_mut(4) {
+        for p in rgba.as_chunks_mut::<4>().0 {
             p[3] = 255;
         }
     }
@@ -575,7 +575,7 @@ fn resize_gdiplus(src: &Frame, tw: u32, th: u32) -> Option<Frame> {
     use windows::Win32::Graphics::GdiPlus::*;
     zx_ui::painter::init_gdiplus();
     let mut bgra = Vec::with_capacity(src.rgba.len());
-    for p in src.rgba.chunks_exact(4) {
+    for p in src.rgba.as_chunks::<4>().0 {
         bgra.extend_from_slice(&[p[2], p[1], p[0], p[3]]);
     }
     unsafe {
@@ -632,7 +632,7 @@ fn resize_gdiplus(src: &Frame, tw: u32, th: u32) -> Option<Frame> {
         let _ = GdipBitmapUnlockBits(d, &mut bd);
         GdipDisposeImage(d as *mut GpImage);
         GdipDisposeImage(s as *mut GpImage);
-        for p in rgba.chunks_exact_mut(4) {
+        for p in rgba.as_chunks_mut::<4>().0 {
             p.swap(0, 2);
         }
         Frame::new(tw, th, rgba, "resize").ok()
@@ -687,7 +687,7 @@ pub fn png_bytes(f: &Frame, force_alpha: bool) -> Result<Vec<u8>, IconError> {
     let opaque = !force_alpha && f.opaque();
     let data: std::borrow::Cow<[u8]> = if opaque {
         let mut rgb = Vec::with_capacity((f.w as usize) * (f.h as usize) * 3);
-        for p in f.rgba.chunks_exact(4) {
+        for p in f.rgba.as_chunks::<4>().0 {
             rgb.extend_from_slice(&p[..3]);
         }
         std::borrow::Cow::Owned(rgb)

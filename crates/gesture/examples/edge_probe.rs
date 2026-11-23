@@ -52,7 +52,7 @@ fn main() {
             GetSystemMetrics(SM_CYVIRTUALSCREEN),
         )
     };
-    let (px, py) = (vx + 0, vy + vh / 2);
+    let (px, py) = (vx, vy + vh / 2);
     println!("光标移到左边 ({px},{py})，注入 +1 / -1 格滚轮");
     unsafe { let _ = SetCursorPos(px, py); }
     std::thread::sleep(std::time::Duration::from_millis(250));

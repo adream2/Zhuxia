@@ -111,7 +111,7 @@ pub fn registered_exe() -> Option<String> {
             None,
             Some(&mut cb),
         );
-        if rc != ERROR_SUCCESS || cb < 4 || cb > 32 * 1024 {
+        if rc != ERROR_SUCCESS || !(4..=32 * 1024).contains(&cb) {
             return None;
         }
         let mut buf = vec![0u16; (cb as usize).div_ceil(2)];
@@ -169,7 +169,7 @@ fn get_sz(sub: &str, name: Option<&str>) -> Option<String> {
             None,
             Some(&mut cb),
         );
-        if rc != ERROR_SUCCESS || cb < 2 || cb > 32 * 1024 {
+        if rc != ERROR_SUCCESS || !(2..=32 * 1024).contains(&cb) {
             return None;
         }
         let mut buf = vec![0u16; (cb as usize).div_ceil(2)];

@@ -49,12 +49,11 @@ pub fn dispatch(rule: Rule, target_window: isize, activate: bool) {
 fn execute(rule: &Rule, hwnd: HWND, activate: bool) -> Result<(), String> {
     let hwnd = if target::is_valid(hwnd) { hwnd } else { HWND::default() };
 
-    if matches!(rule.action, Action::Window(_)) {
-        if hwnd.is_invalid() || !target::is_control_target(hwnd) {
+    if matches!(rule.action, Action::Window(_))
+        && (hwnd.is_invalid() || !target::is_control_target(hwnd)) {
             zx_core::log::info(format!("手势「{}」跳过：目标不是可控制的应用窗口", rule.name));
             return Ok(());
         }
-    }
 
     if activate
         && !hwnd.is_invalid()

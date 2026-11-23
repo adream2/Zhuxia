@@ -207,12 +207,11 @@ impl Recognizer {
                 continue;
             }
             let sign = dx.signum();
-            if last_sign != 0 && sign != last_sign {
-                if (path[i - 1].0 - pivot_x).abs() >= 12 {
+            if last_sign != 0 && sign != last_sign
+                && (path[i - 1].0 - pivot_x).abs() >= 12 {
                     cuts.push(i - 1);
                     pivot_x = path[i - 1].0;
                 }
-            }
             last_sign = sign;
         }
         cuts.push(path.len() - 1);

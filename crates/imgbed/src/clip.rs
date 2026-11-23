@@ -275,7 +275,7 @@ mod tests {
     use super::*;
 
     fn dib(w: i32, h: i32, bpp: u16, top_down: bool) -> Vec<u8> {
-        let stride = ((w as usize * bpp as usize + 31) / 32) * 4;
+        let stride = (w as usize * bpp as usize).div_ceil(32) * 4;
         let hh = h.unsigned_abs() as usize;
         let mut v = vec![0u8; 40 + stride * hh];
         v[0..4].copy_from_slice(&40u32.to_le_bytes());

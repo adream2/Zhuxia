@@ -23,14 +23,14 @@ pub struct Bitmap {
 impl Bitmap {
     /// 整张图是否全不透明（PNG 可以据此省掉 alpha 通道，文件小 25% 左右）。
     pub fn opaque(&self) -> bool {
-        self.rgba.chunks_exact(4).all(|p| p[3] == 255)
+        self.rgba.as_chunks::<4>().0.iter().all(|p| p[3] == 255)
     }
 
     /// 把 alpha 压到背景色上（JPG/GIF/BMP 没有透明通道）。
     /// 就地改 RGBA 并返回新缓冲：`out = src * a + bg * (1 - a)`。
     pub fn flatten(&self, bg: [u8; 3]) -> Vec<u8> {
         let mut out = Vec::with_capacity(self.rgba.len());
-        for p in self.rgba.chunks_exact(4) {
+        for p in self.rgba.as_chunks::<4>().0 {
             let a = p[3] as u32;
             if a == 255 {
                 out.extend_from_slice(&p[..3]);
@@ -160,7 +160,7 @@ unsafe fn load_gdiplus(path: &Path, max_side: u32) -> Result<Bitmap, ConvertErro
     let _ = GdipBitmapUnlockBits(dst, &mut data);
 
     // GDI+ 的 32bppARGB 在内存里是 BGRA，转成 RGBA 交给编码器（PNG/WebP 都要 RGBA）。
-    for p in rgba.chunks_exact_mut(4) {
+    for p in rgba.as_chunks_mut::<4>().0 {
         p.swap(0, 2);
     }
     Result::Ok(Bitmap { w: tw, h: th, rgba })
@@ -236,7 +236,7 @@ fn load_svg(path: &Path, max_side: u32) -> Result<Bitmap, ConvertError> {
 
     let mut rgba = pixmap.data().to_vec();
     // tiny-skia 输出预乘 RGBA；PNG / WebP 要的是直通 alpha。
-    for p in rgba.chunks_exact_mut(4) {
+    for p in rgba.as_chunks_mut::<4>().0 {
         let a = p[3] as u32;
         if a == 0 {
             p[0] = 0;
@@ -273,7 +273,7 @@ pub fn resize(src: &Bitmap, w: u32, h: u32) -> Result<Bitmap, ConvertError> {
     }
     zx_ui::painter::init_gdiplus();
     let mut bgra = Vec::with_capacity(src.rgba.len());
-    for p in src.rgba.chunks_exact(4) {
+    for p in src.rgba.as_chunks::<4>().0 {
         bgra.extend_from_slice(&[p[2], p[1], p[0], p[3]]);
     }
     unsafe {
@@ -328,7 +328,7 @@ pub fn resize(src: &Bitmap, w: u32, h: u32) -> Result<Bitmap, ConvertError> {
             }
         }
         let _ = GdipBitmapUnlockBits(d, &mut data);
-        for p in out.chunks_exact_mut(4) {
+        for p in out.as_chunks_mut::<4>().0 {
             p.swap(0, 2);
         }
         Result::Ok(Bitmap { w, h, rgba: out })
@@ -400,12 +400,12 @@ fn decode_png_slice(data: &[u8]) -> Result<Bitmap, ConvertError> {
     let rgba = match info.color_type {
         png::ColorType::Rgba => px.to_vec(),
         png::ColorType::Rgb => px
-            .chunks_exact(3)
+            .as_chunks::<3>().0.iter()
             .flat_map(|p| [p[0], p[1], p[2], 255])
             .collect(),
         png::ColorType::Grayscale => px.iter().flat_map(|g| [*g, *g, *g, 255]).collect(),
         png::ColorType::GrayscaleAlpha => px
-            .chunks_exact(2)
+            .as_chunks::<2>().0.iter()
             .flat_map(|p| [p[0], p[0], p[0], p[1]])
             .collect(),
         png::ColorType::Indexed => {
@@ -433,7 +433,7 @@ fn decode_bmp_frame(data: &[u8]) -> Result<Bitmap, ConvertError> {
     }
     let h = (h2 / 2) as u32;
     let w = w as u32;
-    let stride = ((w * bpp as u32 + 31) / 32 * 4) as usize;
+    let stride = ((w * bpp as u32).div_ceil(32) * 4) as usize;
     let need = hdr_size + stride * h as usize;
     if data.len() < need {
         return Err(ConvertError::Corrupt("ICO 内的 BMP 像素不完整".into()));
@@ -454,8 +454,8 @@ fn decode_bmp_frame(data: &[u8]) -> Result<Bitmap, ConvertError> {
         }
     }
     // 32 位帧如果没有 alpha（全 0），按不透明处理；24 位帧由 AND 掩码给透明。
-    if bpp == 32 && rgba.chunks_exact(4).all(|p| p[3] == 0) {
-        for p in rgba.chunks_exact_mut(4) {
+    if bpp == 32 && rgba.as_chunks::<4>().0.iter().all(|p| p[3] == 0) {
+        for p in rgba.as_chunks_mut::<4>().0 {
             p[3] = 255;
         }
     }

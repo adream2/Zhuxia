@@ -100,12 +100,12 @@ fn decode_argb(data: &[u8], w: u32, h: u32, hint: &str) -> Result<Frame, IconErr
     }
     let mut rgba = Vec::with_capacity(need);
     let mut any = false;
-    for p in data[..need].chunks_exact(4) {
+    for p in data[..need].as_chunks::<4>().0 {
         any |= p[0] != 0;
         rgba.extend_from_slice(&[p[1], p[2], p[3], p[0]]);
     }
     if !any {
-        for p in rgba.chunks_exact_mut(4) {
+        for p in rgba.as_chunks_mut::<4>().0 {
             p[3] = 255;
         }
     }

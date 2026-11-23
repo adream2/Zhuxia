@@ -866,7 +866,7 @@ async fn ib_upload_paths(paths: Vec<String>, dir: String) -> Value {
 #[tauri::command]
 async fn ib_upload_b64(name: String, data: String, dir: String) -> Value {
     use base64::Engine;
-    let Ok(bytes) = base64::engine::general_purpose::STANDARD.decode(data.split(',').last().unwrap_or("")) else {
+    let Ok(bytes) = base64::engine::general_purpose::STANDARD.decode(data.split(',').next_back().unwrap_or("")) else {
         return json!({ "items": [imgbed::ItemResult::err("clipboard", &name, "图片数据解码失败")] });
     };
     let d = if dir.trim().is_empty() { None } else { Some(dir) };

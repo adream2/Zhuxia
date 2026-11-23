@@ -808,90 +808,6 @@ fn write_wav(path: &std::path::Path, pcm: &[i16]) -> std::io::Result<()> {
     f.flush()
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn passthrough_keeps_samples() {
-        let mut c = Conv::passthrough();
-        let raw: Vec<u8> = [100i16, -100, 32767, -32768].iter().flat_map(|s| s.to_le_bytes()).collect();
-        let mut out = Vec::new();
-        c.feed(&raw, &mut out);
-        assert_eq!(out, vec![100, -100, 32767, -32768]);
-    }
-
-    #[test]
-    fn mono_16k_upsamples_to_stereo_48k() {
-        // 16k 单声道 → 48k 立体声：3 倍采样，左右相同
-        let mut c = Conv {
-            kind: Kind::I16,
-            rate: 16_000,
-            ch: 1,
-            align: 2,
-            passthrough: false,
-            pos: 0.0,
-            prev: [0.0; 2],
-            frames: Vec::new(),
-        };
-        let n = 320usize; // 20ms
-        let raw: Vec<u8> = (0..n)
-            .flat_map(|i| ((i as i16 * 100) % 20000 - 10000).to_le_bytes())
-            .collect();
-        let mut out = Vec::new();
-        c.feed(&raw, &mut out);
-        let frames = out.len() / 2;
-        assert!((frames as i32 - 960).abs() <= 2, "got {frames}");
-        // 立体声：相邻两个样本应相等（单声道复制）
-        assert_eq!(out[0], out[1]);
-    }
-
-    #[test]
-    fn f32_is_clamped() {
-        let mut c = Conv {
-            kind: Kind::F32,
-            rate: RATE,
-            ch: 2,
-            align: 8,
-            passthrough: false,
-            pos: 0.0,
-            prev: [0.0; 2],
-            frames: Vec::new(),
-        };
-        let mut raw = Vec::new();
-        for v in [2.0f32, -2.0] {
-            raw.extend_from_slice(&v.to_le_bytes());
-        }
-        let mut out = Vec::new();
-        c.feed(&raw, &mut out);
-        // 浮点先夹到 [-1,1]，再按 32767 定标（-1.0 → -32767，而不是 -32768）
-        assert_eq!(out[0], 32767);
-        assert_eq!(out[1], -32767);
-    }
-
-    #[test]
-    fn mixing_gain_and_silence() {
-        let mut ring: VecDeque<i16> = VecDeque::new();
-        ring.extend([1000i16, -1000, 2000, -2000]);
-        let mut out = Vec::new();
-        // 要 4 帧但只有 2 帧数据 → 后两帧静音
-        mix_into(&mut ring, 50, true, 4, &mut out);
-        assert_eq!(out.len(), 8);
-        assert_eq!(&out[..4], &[500, -500, 1000, -1000]);
-        assert_eq!(&out[4..], &[0, 0, 0, 0]);
-    }
-
-    #[test]
-    fn disabled_source_contributes_nothing() {
-        let mut ring: VecDeque<i16> = VecDeque::new();
-        ring.extend([1000i16, 1000]);
-        let mut out = Vec::new();
-        mix_into(&mut ring, 100, false, 2, &mut out);
-        assert!(out.is_empty());
-        assert_eq!(ring.len(), 2, "数据不该被消费");
-    }
-}
-
 // ---------------------------------------------------------------- 诊断
 
 /// 诊断 loopback：打印默认播放设备的混音格式，并用**混音格式原样**开一次采集，
@@ -1061,5 +977,89 @@ pub fn diag(ms: u64) -> bool {
             pcm.len()
         );
         packets > 0
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn passthrough_keeps_samples() {
+        let mut c = Conv::passthrough();
+        let raw: Vec<u8> = [100i16, -100, 32767, -32768].iter().flat_map(|s| s.to_le_bytes()).collect();
+        let mut out = Vec::new();
+        c.feed(&raw, &mut out);
+        assert_eq!(out, vec![100, -100, 32767, -32768]);
+    }
+
+    #[test]
+    fn mono_16k_upsamples_to_stereo_48k() {
+        // 16k 单声道 → 48k 立体声：3 倍采样，左右相同
+        let mut c = Conv {
+            kind: Kind::I16,
+            rate: 16_000,
+            ch: 1,
+            align: 2,
+            passthrough: false,
+            pos: 0.0,
+            prev: [0.0; 2],
+            frames: Vec::new(),
+        };
+        let n = 320usize; // 20ms
+        let raw: Vec<u8> = (0..n)
+            .flat_map(|i| ((i as i16 * 100) % 20000 - 10000).to_le_bytes())
+            .collect();
+        let mut out = Vec::new();
+        c.feed(&raw, &mut out);
+        let frames = out.len() / 2;
+        assert!((frames as i32 - 960).abs() <= 2, "got {frames}");
+        // 立体声：相邻两个样本应相等（单声道复制）
+        assert_eq!(out[0], out[1]);
+    }
+
+    #[test]
+    fn f32_is_clamped() {
+        let mut c = Conv {
+            kind: Kind::F32,
+            rate: RATE,
+            ch: 2,
+            align: 8,
+            passthrough: false,
+            pos: 0.0,
+            prev: [0.0; 2],
+            frames: Vec::new(),
+        };
+        let mut raw = Vec::new();
+        for v in [2.0f32, -2.0] {
+            raw.extend_from_slice(&v.to_le_bytes());
+        }
+        let mut out = Vec::new();
+        c.feed(&raw, &mut out);
+        // 浮点先夹到 [-1,1]，再按 32767 定标（-1.0 → -32767，而不是 -32768）
+        assert_eq!(out[0], 32767);
+        assert_eq!(out[1], -32767);
+    }
+
+    #[test]
+    fn mixing_gain_and_silence() {
+        let mut ring: VecDeque<i16> = VecDeque::new();
+        ring.extend([1000i16, -1000, 2000, -2000]);
+        let mut out = Vec::new();
+        // 要 4 帧但只有 2 帧数据 → 后两帧静音
+        mix_into(&mut ring, 50, true, 4, &mut out);
+        assert_eq!(out.len(), 8);
+        assert_eq!(&out[..4], &[500, -500, 1000, -1000]);
+        assert_eq!(&out[4..], &[0, 0, 0, 0]);
+    }
+
+    #[test]
+    fn disabled_source_contributes_nothing() {
+        let mut ring: VecDeque<i16> = VecDeque::new();
+        ring.extend([1000i16, 1000]);
+        let mut out = Vec::new();
+        mix_into(&mut ring, 100, false, 2, &mut out);
+        assert!(out.is_empty());
+        assert_eq!(ring.len(), 2, "数据不该被消费");
     }
 }

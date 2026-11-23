@@ -311,7 +311,7 @@ fn place(hwnd: HWND, w: i32, h: i32, s: f32) {
         2 | 5 => vx + vw - w - m,
         _ => vx + (vw - w) / 2,
     };
-    let y = if matches!(pos, 0 | 1 | 2) { vy + m } else { vy + vh - h - m };
+    let y = if matches!(pos, 0..=2) { vy + m } else { vy + vh - h - m };
     unsafe {
         let _ = SetWindowPos(hwnd, HWND_TOPMOST, x, y, w, h, SWP_NOACTIVATE);
     }

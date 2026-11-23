@@ -46,14 +46,13 @@ fn extract_depth(path: &Path, depth: u32) -> Result<IconSet, IconError> {
         let mut f = std::fs::File::open(path).map_err(|e| crate::error::io_error(&e, path))?;
         let len = meta.len();
         let mut ok = false;
-        if len >= 512 {
-            if f.seek(SeekFrom::End(-512)).is_ok() {
+        if len >= 512
+            && f.seek(SeekFrom::End(-512)).is_ok() {
                 let mut t = [0u8; 4];
                 if f.read_exact(&mut t).is_ok() {
                     ok = &t == b"koly";
                 }
             }
-        }
         ok
     };
 
@@ -112,7 +111,7 @@ fn extract_depth(path: &Path, depth: u32) -> Result<IconSet, IconError> {
 }
 
 fn looks_lnk(head: &[u8]) -> bool {
-    head.len() >= 4 && &head[..4] == &[0x4C, 0x00, 0x00, 0x00]
+    head.len() >= 4 && head[..4] == [0x4C, 0x00, 0x00, 0x00]
 }
 
 fn is_zip(head: &[u8]) -> bool {

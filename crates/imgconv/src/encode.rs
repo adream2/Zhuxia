@@ -70,10 +70,10 @@ fn write_png(w: u32, h: u32, rgba: &[u8], path: &Path) -> Result<(), ConvertErro
 
 /// 编码成 PNG 字节。`force_alpha = true` 时即使全不透明也保留 RGBA（ICO 的帧需要）。
 fn png_bytes(w: u32, h: u32, rgba: &[u8], force_alpha: bool) -> Result<Vec<u8>, ConvertError> {
-    let opaque = !force_alpha && rgba.chunks_exact(4).all(|p| p[3] == 255);
+    let opaque = !force_alpha && rgba.as_chunks::<4>().0.iter().all(|p| p[3] == 255);
     let data: std::borrow::Cow<[u8]> = if opaque {
         let mut rgb = Vec::with_capacity((w as usize) * (h as usize) * 3);
-        for p in rgba.chunks_exact(4) {
+        for p in rgba.as_chunks::<4>().0 {
             rgb.extend_from_slice(&p[..3]);
         }
         std::borrow::Cow::Owned(rgb)
@@ -207,7 +207,7 @@ fn write_gdiplus(
 
     // GDI+ 的 32bppARGB 在内存里是 BGRA：换一次字节序，别让红蓝互换。
     let mut bgra = Vec::with_capacity(rgba.len());
-    for p in rgba.chunks_exact(4) {
+    for p in rgba.as_chunks::<4>().0 {
         bgra.extend_from_slice(&[p[2], p[1], p[0], p[3]]);
     }
 

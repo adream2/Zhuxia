@@ -365,11 +365,11 @@ mod tests {
         let img = Image {
             width: 8,
             height: 8,
-            rgba: vec![10u8, 20, 30, 255].repeat(64),
+            rgba: [10u8, 20, 30, 255].repeat(64),
         };
         let small = resize(&img, 4);
         assert_eq!((small.width, small.height), (4, 4));
-        for px in small.rgba.chunks_exact(4) {
+        for px in small.rgba.as_chunks::<4>().0 {
             assert!((px[0] as i32 - 10).abs() <= 1);
             assert!((px[1] as i32 - 20).abs() <= 1);
             assert!((px[2] as i32 - 30).abs() <= 1);

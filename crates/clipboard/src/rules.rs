@@ -65,9 +65,9 @@ fn visible_whitespace(text: &str) -> String {
         if line.is_empty() {
             continue;
         }
-        out.extend(std::iter::repeat(MARK).take(leading.min(MAX_MARKS)));
+        out.extend(std::iter::repeat_n(MARK, leading.min(MAX_MARKS)));
         out.push_str(line.trim_matches([' ', '\t']));
-        out.extend(std::iter::repeat(MARK).take(trailing.min(MAX_MARKS)));
+        out.extend(std::iter::repeat_n(MARK, trailing.min(MAX_MARKS)));
     }
     out
 }

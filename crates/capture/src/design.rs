@@ -145,7 +145,7 @@ pub fn shadow(cv: &mut Canvas, x: f32, y: f32, w: f32, h: f32, r: f32, s: f32) {
             w + grow * 2.0,
             h + grow * 2.0,
             r + grow,
-            ((alpha as u32) << 24) | 0x000000,
+            (alpha as u32) << 24,
         );
     }
 }

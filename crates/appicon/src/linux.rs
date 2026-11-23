@@ -192,11 +192,10 @@ fn cpio_entries(mut rd: Box<dyn Read>, out: &mut Vec<(String, Vec<u8>)>) -> Resu
             }
             total += buf.len() as u64;
             out.push((name, buf));
-        } else if filesize > 0 {
-            if std::io::copy(&mut rd.by_ref().take(filesize as u64), &mut std::io::sink()).is_err() {
+        } else if filesize > 0
+            && std::io::copy(&mut rd.by_ref().take(filesize as u64), &mut std::io::sink()).is_err() {
                 break;
             }
-        }
         let dpad = (4 - filesize % 4) % 4;
         if dpad > 0 && std::io::copy(&mut rd.by_ref().take(dpad as u64), &mut std::io::sink()).is_err() {
             break;
