@@ -36,6 +36,22 @@ Windows 桌面常驻小工具集合：一个后台进程提供系统监视、剪
 - 宣传页与自动化：`site/README.md`（页面由发布流程自动重建并部署到 GitHub Pages）。
 - 第三方组件与许可证声明：`THIRD_PARTY_NOTICES.md`。
 
+## 反馈
+
+统一走 GitHub Issues，只有这一条渠道（不收邮件、不建群——不在 Issue 里记的问题会随对话一起消失）：
+
+- **问题反馈**：[新建 issue](https://github.com/adream2/Zhuxia/issues/new?template=bug_report.yml)，
+  表单会要版本、复现步骤、系统与运行形态、可选日志。
+- **功能建议**：[新建 issue](https://github.com/adream2/Zhuxia/issues/new?template=feature_request.yml)，
+  重点是「你现在怎么凑合的」，比「加个 X」有用。
+- **应用内入口**：设置面板 → 关于 → 反馈 Bug / 功能建议，版本与系统信息会自动填进链接；
+  旁边的「复制诊断信息」把同样的内容放进剪贴板，贴到哪儿都行。
+
+诊断信息只含版本、系统、权限、任务栏形态、采样间隔这类公开事实，**不含路径与用户名**。
+贴日志前请自行删掉 `%USERPROFILE%` 相关的路径、密钥和不想公开的窗口标题。
+
+提之前建议先确认是**最新版本**（设置 → 关于 看版本号），并搜一下已有 issue。
+
 ## 许可
 
 本项目以 **Apache License 2.0** 授权，全文见 `LICENSE`，署名信息见 `NOTICE`。

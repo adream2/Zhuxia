@@ -1,0 +1,70 @@
+name: 问题反馈
+description: 崩溃、显示不对、功能不工作——用这个模板，带上版本与复现步骤。
+title: "[Bug] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        先谢谢愿意花时间反馈。
+
+        提之前建议先确认两件事：**是不是最新版本**（设置面板 → 关于 里能看版本号），
+        以及 **Issues 里有没有重复**。很多“是不是 bug”在 `docs/` 里能直接确认。
+
+        从设置面板「关于 → 反馈 Bug」点进来时，版本和系统信息会自动填好。
+
+  - type: textarea
+    id: what
+    attributes:
+      label: 发生了什么
+      description: 现象 + 你的预期，两句话能说清最好。
+      placeholder: |
+        按 Alt+A 拖出选区松手后，工具条没出现，只有暗化的屏幕。
+        预期是进入编辑态、能看到工具条。
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      description: 能稳定复现的步骤；偶发的话写清楚出现过几次、大概什么场景。
+      placeholder: |
+        1. 打开任意窗口，按 Alt+A
+        2. 从左上拖到右下
+        3. 松手 → 卡在暗化状态
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: 版本
+      description: 设置面板左下角，或 exe 文件属性 → 详细信息 里的产品版本。
+      placeholder: 0.0.1
+    validations:
+      required: true
+
+  - type: input
+    id: system
+    attributes:
+      label: 系统与运行形态
+      description: 设置面板「关于 → 复制诊断信息」里粘过来，或自己写。
+      placeholder: Windows NT 10.0 · x64 · 管理员 · 任务栏条 · 采样 1000ms · ETW
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志（可选）
+      description: |
+        设置面板 → 关于 → 打开日志目录，取 `logs/zhuxia-日期.log` 里出问题那一小段。
+        贴之前请删掉路径里的用户名、密钥、以及不想公开的窗口标题。
+      render: text
+      placeholder: 2026-11-23 16:40:12 [INFO] ...
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: 自查
+      options:
+        - label: 已在最新版本上复现
+        - label: 已搜索 Issues，没有重复

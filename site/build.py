@@ -496,6 +496,7 @@ def write_llms(out: Path, site: str, slug: str, version: str, rel: list[dict]) -
         "- 技术栈：Rust + Win32 原生绘制；设置面板用 Tauri 2（按需启动，不常驻）",
         "- 授权：Apache License 2.0，免费使用，可商用",
         f"- 源码：{repo}",
+        f"- 问题反馈：{repo}/issues",
         f"- 官网：{site}",
         f"- 当前开发版本：{version}",
         "",

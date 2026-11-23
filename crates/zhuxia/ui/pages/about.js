@@ -31,8 +31,42 @@ function pageAbout() {
   const logs = h("button", "btn", "打开日志目录");
   logs.onclick = () => inv("open_logs");
   c.append(rowBtn("日志", "logs/zhuxia-日期.log，出问题先看这里", logs));
+
+  /* 反馈渠道：GitHub Issues。
+     诊断信息只带公开、可复述的运行时事实——版本、系统、权限、形态、采样，
+     不带路径与用户名。模板 id 由 .github/ISSUE_TEMPLATE/*.yml 定义，
+     用 query 预填 version / system 两个字段。 */
+  const REPO_URL = "https://github.com/adream2/Zhuxia";
+  const m = (navigator.userAgent || "").match(/Windows NT ([\d.]+);\s*(Win64|x64|WOW64|ARM64)/i);
+  const system = m ? `Windows NT ${m[1]} · ${m[2] === "ARM64" ? "arm64" : "x64"}` : "Windows";
+  const diag = [
+    `版本：v${S.meta.version}`,
+    `系统：${system}`,
+    `权限：${rt.admin ? "管理员" : "普通"}`,
+    `任务栏形态：${rt.floating ? "悬浮卡片" : "任务栏条"}`,
+    `采样间隔：${S.view.interval} ms`,
+    `按进程网速：${rt.etw ? "ETW" : rt.srum ? "SRUM" : "不可用"}`,
+  ].join("\n");
+  const issueUrl = (tpl) => {
+    const q = new URLSearchParams({ template: tpl, version: S.meta.version, system });
+    return `${REPO_URL}/issues/new?${q.toString()}`;
+  };
+  const bug = h("button", "btn", "新建反馈");
+  bug.onclick = () => inv("open_url", { url: issueUrl("bug_report.yml") });
+  c.append(rowBtn("反馈 Bug", "打开 GitHub 新建 issue，版本与系统信息自动带上", bug));
+  const wish = h("button", "btn", "提建议");
+  wish.onclick = () => inv("open_url", { url: issueUrl("feature_request.yml") });
+  c.append(rowBtn("功能建议", "想要什么、现在怎么凑合的，写清楚就行", wish));
+  const diagBtn = h("button", "btn", "复制");
+  diagBtn.onclick = async () => {
+    const r = await inv("copy_text", { text: diag });
+    if (r && r.ok) toast("诊断信息已复制");
+    else toast("复制失败，可能是剪贴板被别的程序占用");
+  };
+  c.append(rowBtn("复制诊断信息", "版本 / 系统 / 权限 / 形态，贴到哪儿都行", diagBtn));
+
   const repo = h("button", "btn", "打开 GitHub");
-  repo.onclick = () => inv("open_url", { url: "https://github.com/adream2/Zhuxia" });
+  repo.onclick = () => inv("open_url", { url: REPO_URL });
   c.append(rowBtn("项目仓库", "源码、问题与更新都以这个仓库为准", repo));
   const quit = h("button", "btn", "退出驻匣");
   quit.onclick = () => inv("quit_app");

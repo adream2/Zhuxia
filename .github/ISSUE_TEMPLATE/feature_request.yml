@@ -1,0 +1,57 @@
+name: 功能建议
+description: 想要的新功能、觉得别扭的交互——用这个模板。
+title: "[建议] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        建议不必写得很完整，说清「你现在怎么凑合的」通常比说「加个 X」有用得多。
+
+        也欢迎直接说某个模块要不要合并、砍掉、换实现方向。
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: 要解决什么问题
+      description: 现在卡在哪、为什么要多一步操作、或者哪个场景根本做不到。
+      placeholder: |
+        我经常要给截图加编号，现在序号工具只能一个个点，没法从 1 自动排到 10。
+    validations:
+      required: true
+
+  - type: textarea
+    id: idea
+    attributes:
+      label: 你设想的做法
+      description: 界面放哪、怎么操作、有没有参考的产品。写不清也没关系。
+      placeholder: 序号工具加个“连续编号”开关，下一个号自动 +1。
+
+  - type: input
+    id: version
+    attributes:
+      label: 当前版本
+      placeholder: 0.0.1
+
+  - type: dropdown
+    id: module
+    attributes:
+      label: 涉及模块
+      options:
+        - 任务栏监视
+        - 截图 / 贴图
+        - 剪贴板历史
+        - 鼠标手势
+        - 录屏 / GIF
+        - 图片转换
+        - 图标提取
+        - 图床
+        - 设置面板
+        - 其他 / 全局
+    validations:
+      required: true
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: 补充（可选）
+      description: 草图、截图、相关链接。

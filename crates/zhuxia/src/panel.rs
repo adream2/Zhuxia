@@ -148,6 +148,7 @@ pub fn run() {
             ib_pick_files, ib_preview, ib_upload_paths, ib_upload_b64, ib_clipboard,
             ib_paths, ib_history, ib_remote, ib_thumb, ib_thumb_url, ib_image,
             ib_delete, ib_delete_remote, ib_clear_history, ib_copy, ib_open, ib_open_dir,
+            copy_text,
             take_page_request,
             ocr_model_state, ocr_model_progress, ocr_model_download, ocr_model_import, ocr_model_remove
         ])
@@ -868,6 +869,12 @@ fn ib_clear_history() -> Value {
 
 #[tauri::command]
 fn ib_copy(text: String) -> Value {
+    json!({ "ok": imgbed::clip::set_text(&text) })
+}
+
+/// 复制任意文本（关于页的「复制诊断信息」用）。
+#[tauri::command]
+fn copy_text(text: String) -> Value {
     json!({ "ok": imgbed::clip::set_text(&text) })
 }
 

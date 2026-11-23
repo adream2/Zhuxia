@@ -1,0 +1,15 @@
+# 新建 Issue 时先选模板：问题反馈 / 功能建议。
+# 留空开关关掉，避免出现没有版本号、没有复现步骤的“报错了”式条目——
+# 这类 issue 来回问三轮才能开始查，对反馈的人和维护的人都是浪费。
+blank_issues_enabled: false
+
+contact_links:
+  - name: 先看文档
+    url: https://github.com/adream2/Zhuxia/blob/main/docs/ARCHITECTURE.md
+    about: 各模块的说明在 docs/ 下；很多“这是不是 bug”在里面能直接确认。
+  - name: 最新版本
+    url: https://github.com/adream2/Zhuxia/releases
+    about: 反馈前先确认是不是已经在最新版本里修掉了。
+  - name: 更新日志
+    url: https://adream2.github.io/Zhuxia/#changelog
+    about: 每个版本改了什么，按提交历史自动汇总。
