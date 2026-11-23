@@ -49,7 +49,7 @@ checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 
 [[package]]
 name = "appicon"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "backhand",
  "bzip2",
@@ -356,7 +356,7 @@ dependencies = [
 
 [[package]]
 name = "capture"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "gif",
  "serde",
@@ -465,7 +465,7 @@ dependencies = [
 
 [[package]]
 name = "clipboard"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "regex-lite",
  "serde",
@@ -1327,7 +1327,7 @@ dependencies = [
 
 [[package]]
 name = "gesture"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "windows 0.58.0",
  "zx-core",
@@ -1860,7 +1860,7 @@ checksum = "65b27460c2c92b037f3f94c538ed9a3342f3fdf923606781629ccb35f82d042a"
 
 [[package]]
 name = "imgbed"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "base64 0.21.7",
  "png",
@@ -1877,7 +1877,7 @@ dependencies = [
 
 [[package]]
 name = "imgconv"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "image",
  "libwebp-sys",
@@ -3968,7 +3968,7 @@ checksum = "61c41af27dd6d1e27b1b16b489db798443478cef1f06a660c96db617ba5de3b1"
 
 [[package]]
 name = "taskmon"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "libloading",
  "serde",
@@ -5503,7 +5503,7 @@ dependencies = [
 
 [[package]]
 name = "zhuxia"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "appicon",
  "base64 0.21.7",
@@ -5600,7 +5600,7 @@ dependencies = [
 
 [[package]]
 name = "zx-core"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "serde",
  "serde_yaml",
@@ -5609,7 +5609,7 @@ dependencies = [
 
 [[package]]
 name = "zx-media"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "libwebp-sys",
  "png",
@@ -5618,7 +5618,7 @@ dependencies = [
 
 [[package]]
 name = "zx-ui"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "windows 0.58.0",
  "zx-core",
