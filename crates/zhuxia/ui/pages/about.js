@@ -71,13 +71,6 @@ function pageAbout() {
   frag.append(h("p", "sub",
     "早期移植的 GPL / 无许可证代码已在本版本重写移除；完整声明见仓库根目录 THIRD_PARTY_NOTICES.md。"));
 
-  frag.append(h("h2", "", "版本"));
-  const ver = h("div", "card");
-  ver.append(row("版本号", "major.minor.patch：最右位 0 正式 / 1 预览；中间位功能增减；最左位重大改变",
-    h("span", "val", `v${S.meta.version}`)));
-  ver.append(row("示例", "1.0.0 首个正式版 → 1.1.0 稳定小改 → 1.1.1 新增功能但尚未稳定", null, true));
-  frag.append(ver);
-
   frag.append(h("h2", "", "说明"));
   const notes = h("div", "card");
   notes.append(row("采样口径", "与任务管理器同源：GetSystemTimes / NtQuerySystemInformation / IOCTL_DISK_PERFORMANCE / PDH GPU Engine / GetIfTable2 / ETW"));

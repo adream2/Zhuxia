@@ -374,7 +374,8 @@ pub fn draw_all(
     let (bx, by) = (x0 * s + ox - pad, y0 * s + oy - pad);
     let (bw, bh) = ((x1 - x0) * s + pad * 2.0, (y1 - y0) * s + pad * 2.0);
     canvas.stroke_round(bx, by, bw, bh, 0.0, 1.5, ACCENT);
-    let r = 4.5;
+    // 控制点画大一点：尺寸调整全靠它们（和它们之间的边带），太小点不中。
+    let r = 5.0;
     for ((hx, hy), _) in handles(a) {
         let (px, py) = (hx * s + ox, hy * s + oy);
         canvas.fill_ellipse(px - r, py - r, r * 2.0, r * 2.0, 0xFFFFFFFF);
@@ -426,10 +427,48 @@ pub fn handles(a: &Anno) -> Vec<((f32, f32), AHdl)> {
 }
 
 pub fn handle_at(a: &Anno, x: f32, y: f32, tol: f32) -> Option<AHdl> {
-    handles(a)
+    if let Some((_, h)) = handles(a)
         .into_iter()
         .find(|((hx, hy), _)| (hx - x).abs() <= tol && (hy - y).abs() <= tol)
-        .map(|(_, h)| h)
+    {
+        return Some(h);
+    }
+    // 八个控制点之间的空档以前什么都不响应：用户在框线上拖、想改大小，
+    // 结果要么新画一个图形，要么整块被拖走。这里把包围盒的四条边也当成控制点，
+    // 只有「小图形」才跳过——那尺寸下边带会把内部全吃掉，拖动就没法移动了。
+    edge_at(a, x, y, tol)
+}
+
+/// 包围盒边带的命中：贴着哪条边就返回那条边的方向。
+///
+/// 线段/箭头只有两个端点可拖（它们没有"宽高"）；序号是圆点，不参与缩放。
+fn edge_at(a: &Anno, x: f32, y: f32, tol: f32) -> Option<AHdl> {
+    if matches!(a.tool, Tool::Arrow | Tool::Line | Tool::Counter | Tool::Select) {
+        return None;
+    }
+    let (x0, y0, x1, y1) = a.bounds();
+    if x < x0 - tol || x > x1 + tol || y < y0 - tol || y > y1 + tol {
+        return None;
+    }
+    // 图形本身太小时，边带会连中间一起盖住，移动就没了着力点。
+    if x1 - x0 <= tol * 3.0 && y1 - y0 <= tol * 3.0 {
+        return None;
+    }
+    let (dl, dr) = ((x - x0).abs(), (x1 - x).abs());
+    let (dt, db) = ((y - y0).abs(), (y1 - y).abs());
+    let m = dl.min(dr).min(dt).min(db);
+    if m > tol {
+        return None;
+    }
+    Some(if m == dt {
+        AHdl::N
+    } else if m == db {
+        AHdl::S
+    } else if m == dl {
+        AHdl::W
+    } else {
+        AHdl::E
+    })
 }
 
 /// 拖控制点改尺寸；`orig` 是按下时的快照，避免逐帧累乘漂移。
@@ -680,5 +719,45 @@ mod tests {
     fn text_without_content_is_dropped() {
         let a = Anno::new(Tool::Text, (10, 10), 0xFFFFFFFF, 0);
         assert!(!a.is_meaningful());
+    }
+
+    #[test]
+    fn edges_of_a_selected_shape_are_draggable() {
+        let mut a = Anno::new(Tool::Ellipse, (20, 20), 0xFFFFFFFF, 0);
+        a.set_end((200, 140));
+        // 贴着四条边（不是控制点位置）也要能抓到，否则用户拖边线改不了尺寸
+        assert_eq!(handle_at(&a, 110.0, 22.0, 8.0), Some(AHdl::N));
+        assert_eq!(handle_at(&a, 110.0, 138.0, 8.0), Some(AHdl::S));
+        assert_eq!(handle_at(&a, 22.0, 80.0, 8.0), Some(AHdl::W));
+        assert_eq!(handle_at(&a, 198.0, 80.0, 8.0), Some(AHdl::E));
+        // 中间仍然是空的：那里要留给「整块拖动」
+        assert_eq!(handle_at(&a, 110.0, 80.0, 8.0), None);
+    }
+
+    #[test]
+    fn small_shapes_still_take_corner_handles() {
+        let mut a = Anno::new(Tool::Rect, (100, 100), 0xFFFFFFFF, 0);
+        a.set_end((108, 108));
+        // 8px 的图形本来就没有"内部"可言，命中控制点即可（拖动仍然能改尺寸）
+        assert_eq!(handle_at(&a, 104.0, 104.0, 8.0), Some(AHdl::NW));
+        assert_eq!(handle_at(&a, 100.0, 100.0, 8.0), Some(AHdl::NW));
+    }
+
+    #[test]
+    fn lines_do_not_get_edge_handles() {
+        let mut a = Anno::new(Tool::Line, (0, 0), 0xFFFFFFFF, 0);
+        a.set_end((200, 200));
+        // 线段中点不该被当成「边」
+        assert_eq!(handle_at(&a, 100.0, 100.0, 8.0), None);
+    }
+
+    #[test]
+    fn edge_resize_changes_size_of_a_rect() {
+        let mut a = Anno::new(Tool::Rect, (10, 10), 0xFFFF0000, 0);
+        a.set_end((110, 60));
+        let orig = a.clone();
+        let h = handle_at(&a, 60.0, 60.0, 8.0).expect("底边可抓");
+        resize(&mut a, h, 60.0, 120.0, &orig);
+        assert_eq!(a.bounds(), (10.0, 10.0, 110.0, 120.0));
     }
 }

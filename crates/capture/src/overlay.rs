@@ -23,7 +23,9 @@ use std::sync::OnceLock;
 use std::time::Instant;
 
 use windows::core::PCWSTR;
-use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, POINT, RECT, WPARAM};
+use windows::Win32::Foundation::{
+    COLORREF, HINSTANCE, HWND, LPARAM, LRESULT, POINT, RECT, WPARAM,
+};
 use windows::Win32::Graphics::Gdi::*;
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::System::Threading::AttachThreadInput;
@@ -1378,8 +1380,18 @@ impl Ov {
         let px = (self.width * 4.0 * self.doc_scale).max(14.0);
         let width = (260.0 * s) as i32;
         let height = (px * 1.7) as i32;
-        let screen_x = self.doc_rect.left + (local.0 * self.doc_scale) as i32;
-        let screen_y = self.doc_rect.top + (local.1 * self.doc_scale) as i32;
+        // 输入框自己带一圈描边（见 `paint_text_frame`）：压在白色/浅色截图上，
+        // 光秃秃的 EDIT 连边界都看不出来。外壳把描边画在 EDIT 外面，
+        // 同时让 EDIT 的左上角仍然落在点击点上，提交后文字不会跳位置。
+        let inset = text_frame_inset(s);
+        let (mut wx, mut wy) = (
+            self.doc_rect.left + (local.0 * self.doc_scale) as i32 - inset,
+            self.doc_rect.top + (local.1 * self.doc_scale) as i32 - inset,
+        );
+        let (ww, wh) = (width + inset * 2, height + inset * 2);
+        // 夹进虚拟屏幕：多了一圈外框之后更容易被顶出屏幕外
+        wx = wx.clamp(self.vx + 2, (self.vx + self.vw - ww - 2).max(self.vx + 2));
+        wy = wy.clamp(self.vy + 2, (self.vy + self.vh - wh - 2).max(self.vy + 2));
         let hinst = unsafe { GetModuleHandleW(None).unwrap_or_default() };
         let Ok(win) = (unsafe {
             CreateWindowExW(
@@ -1387,10 +1399,11 @@ impl Ov {
                 PCWSTR(win_class().as_ptr()),
                 PCWSTR::null(),
                 WS_POPUP,
-                screen_x, screen_y, width, height,
+                wx, wy, ww, wh,
                 self.hwnd, HMENU::default(), HINSTANCE(hinst.0), None,
             )
         }) else { return };
+        zx_ui::painter::set_round_region(win, ww, wh, (6.0 * s) as i32);
         let edit = unsafe {
             CreateWindowExW(
                 WINDOW_EX_STYLE::default(),
@@ -1398,7 +1411,7 @@ impl Ov {
                 PCWSTR::null(),
                 WS_CHILD | WS_VISIBLE | WS_TABSTOP
                     | WINDOW_STYLE(ES_AUTOHSCROLL as u32) | WINDOW_STYLE(ES_LEFT as u32),
-                0, 0, width, height,
+                inset, inset, width, height,
                 win, HMENU::default(), HINSTANCE(hinst.0), None,
             )
         };
@@ -1415,7 +1428,10 @@ impl Ov {
         };
         unsafe {
             SendMessageW(edit, WM_SETFONT, WPARAM(font.0 as usize), LPARAM(1));
-            let _ = SetWindowPos(win, HWND_TOPMOST, screen_x, screen_y, width, height, SWP_SHOWWINDOW);
+            // 字形和描边之间留 2px，不然第一个字贴着框
+            SendMessageW(edit, 0x00D3, WPARAM(0x0001 | 0x0002),
+                         LPARAM(2 | (2 << 16)));
+            let _ = SetWindowPos(win, HWND_TOPMOST, wx, wy, ww, wh, SWP_SHOWWINDOW);
             let _ = SetForegroundWindow(win);
             let _ = SetFocus(edit);
         }
@@ -1768,6 +1784,55 @@ pub fn register() {
     register_class(TEXT_CLASS, text_wndproc, None);
 }
 
+/// 输入框外框的宽度（像素）：2 道 1px 线 + 主题色环 + 内衬留白。
+fn text_frame_inset(s: f32) -> i32 {
+    let hair = (1.0 * s).round().max(1.0) as i32;
+    let ring = (2.0 * s).round().max(2.0) as i32;
+    hair * 2 + ring + (3.0 * s).round().max(2.0) as i32
+}
+
+/// 画输入框外框：由外向内 1px 深色 / 1px 白 / 2px 主题蓝，最后是白色底。
+///
+/// 为什么要三层：截图的背景可能是纯白、纯黑或者花花绿绿的窗口。
+/// 只压一条系统灰边（`WS_BORDER`）在白底上等于没有；只压蓝边在深色照片上又偏闷。
+/// 深色线负责和白底分开，白线负责和深底分开，蓝环负责表达「这里是输入框」。
+/// EDIT 本身不透明白底，所以输入的文字永远是白底黑字，跟背后的图无关。
+fn paint_text_frame(hwnd: HWND, hdc: HDC, s: f32) {
+    let hair = (1.0 * s).round().max(1.0) as i32;
+    let ring = (2.0 * s).round().max(2.0) as i32;
+    let mut r = RECT::default();
+    unsafe {
+        let _ = GetClientRect(hwnd, &mut r);
+    }
+    // 逐层向内覆盖：每一层都把内部整块刷成自己的颜色，最后剩下的是白底
+    for (inset, color) in [
+        (0, 0xFF10131Au32),
+        (hair, 0xFFFFFFFF),
+        (hair * 2, 0xFF2E90FA),
+        (hair * 2 + ring, 0xFFFFFFFF),
+    ] {
+        let band = RECT {
+            left: r.left + inset,
+            top: r.top + inset,
+            right: r.right - inset,
+            bottom: r.bottom - inset,
+        };
+        if band.right <= band.left || band.bottom <= band.top {
+            break;
+        }
+        unsafe {
+            let brush = CreateSolidBrush(rgb_ref(color));
+            FillRect(hdc, &band, brush);
+            let _ = DeleteObject(HGDIOBJ(brush.0));
+        }
+    }
+}
+
+fn rgb_ref(argb: u32) -> COLORREF {
+    let (r, g, b) = ((argb >> 16) & 0xFF, (argb >> 8) & 0xFF, argb & 0xFF);
+    COLORREF(b << 16 | g << 8 | r)
+}
+
 unsafe extern "system" fn text_wndproc(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -> LRESULT {
     match msg {
         WM_ACTIVATE => {
@@ -1778,6 +1843,15 @@ unsafe extern "system" fn text_wndproc(hwnd: HWND, msg: u32, w: WPARAM, l: LPARA
             }
             LRESULT(0)
         }
+        WM_PAINT => {
+            let mut ps = PAINTSTRUCT::default();
+            let hdc = BeginPaint(hwnd, &mut ps);
+            let s = GetDpiForWindow(hwnd) as f32 / 96.0;
+            paint_text_frame(hwnd, hdc, s);
+            let _ = EndPaint(hwnd, &ps);
+            LRESULT(0)
+        }
+        WM_ERASEBKGND => LRESULT(1),
         _ => DefWindowProcW(hwnd, msg, w, l),
     }
 }
@@ -1901,6 +1975,7 @@ impl Ov {
             Stage::Editing => self.press_editing(hwnd),
         };
         self.paint();
+        self.refresh_cursor();
         req
     }
 
@@ -2020,7 +2095,7 @@ impl Ov {
     fn grab_anno_handle(&mut self, lx: f32, ly: f32, hwnd: HWND) -> bool {
         let Some(i) = self.selected else { return false };
         let Some(a) = self.annos.get(i).cloned() else { return false };
-        let tol = (7.0 / self.doc_scale.max(0.01)).max(3.0);
+        let tol = (9.0 / self.doc_scale.max(0.01)).max(4.0);
         let Some(h) = annotate::handle_at(&a, lx, ly, tol) else { return false };
         self.push_hist();
         self.anno_resize = Some((i, h, a));
@@ -2064,6 +2139,7 @@ impl Ov {
             Stage::Choosing => {}
         }
         self.paint();
+        self.refresh_cursor();
     }
 
     /// 松手定框。返回 false 表示已经转交给拼接或录制，不要继续按选区处理。
@@ -2163,6 +2239,7 @@ impl Ov {
         };
         if redraw {
             self.paint();
+            self.refresh_cursor();
         }
     }
 
@@ -2299,18 +2376,80 @@ impl Ov {
 
     /// 手柄决定光标形状：只有已框选阶段才可能是缩放/移动。
     fn cursor_kind(&self) -> PCWSTR {
-        if self.stage != Stage::Selected {
+        // 工具条、色板上的东西都是可点的：手型，别拿十字去指按钮。
+        if self.over_ui() {
+            return IDC_HAND;
+        }
+        match self.stage {
+            Stage::Choosing | Stage::Dragging => IDC_CROSS,
+            Stage::Selected => {
+                let (x, y) = self.cursor;
+                match handle_at(self.sel, (x, y), (8.0 * self.scale()) as i32) {
+                    Some(Handle::N) | Some(Handle::S) => IDC_SIZENS,
+                    Some(Handle::E) | Some(Handle::W) => IDC_SIZEWE,
+                    Some(Handle::NW) | Some(Handle::SE) => IDC_SIZENWSE,
+                    Some(Handle::NE) | Some(Handle::SW) => IDC_SIZENESW,
+                    Some(Handle::Move) => IDC_SIZEALL,
+                    None => IDC_CROSS,
+                }
+            }
+            Stage::Editing => self.cursor_editing(),
+        }
+    }
+
+    /// 指针是否压在工具条按钮或色板上（每帧重算的命中区已经存好了）。
+    fn over_ui(&self) -> bool {
+        let (x, y) = self.cursor;
+        self.toolbar.iter().any(|(r, _)| target::hit(r, x, y))
+            || self.palette.iter().any(|(r, _)| target::hit(r, x, y))
+    }
+
+    /// 编辑态光标：画图工具十字、文字工字、选择工具箭头，
+    /// 压在选中图形（或框线）上则是缩放/移动——这才是"点下去会发生什么"的预告。
+    fn cursor_editing(&self) -> PCWSTR {
+        if self.drawing.is_some() {
             return IDC_CROSS;
         }
-        let (x, y) = self.cursor;
-        match handle_at(self.sel, (x, y), (8.0 * self.scale()) as i32) {
-            Some(Handle::N) | Some(Handle::S) => IDC_SIZENS,
-            Some(Handle::E) | Some(Handle::W) => IDC_SIZEWE,
-            Some(Handle::NW) | Some(Handle::SE) => IDC_SIZENWSE,
-            Some(Handle::NE) | Some(Handle::SW) => IDC_SIZENESW,
-            Some(Handle::Move) => IDC_SIZEALL,
-            None => IDC_CROSS,
+        if let Some((_, h, _)) = self.anno_resize {
+            return anno_cursor(h);
         }
+        let (lx, ly) = self.to_doc(self.cursor.0, self.cursor.1);
+        if let Some(a) = self.selected.and_then(|i| self.annos.get(i)) {
+            let tol = (9.0 / self.doc_scale.max(0.01)).max(4.0);
+            if let Some(h) = annotate::handle_at(a, lx, ly, tol) {
+                return anno_cursor(h);
+            }
+        }
+        match self.tool {
+            Tool::Select => {
+                if annotate::hit(&self.annos, lx, ly).is_some() {
+                    IDC_SIZEALL
+                } else {
+                    IDC_ARROW
+                }
+            }
+            Tool::Text => IDC_IBEAM,
+            _ => IDC_CROSS,
+        }
+    }
+
+    /// 改了工具/拖完手柄之后立刻换光标，不用等鼠标再动一下。
+    fn refresh_cursor(&self) {
+        let cur = self.cursor_kind();
+        unsafe {
+            let _ = SetCursor(LoadCursorW(None, cur).unwrap_or_default());
+        }
+    }
+}
+
+/// 标注控制点 → 系统光标。
+fn anno_cursor(h: AHdl) -> PCWSTR {
+    match h {
+        AHdl::N | AHdl::S => IDC_SIZENS,
+        AHdl::E | AHdl::W => IDC_SIZEWE,
+        AHdl::NW | AHdl::SE => IDC_SIZENWSE,
+        AHdl::NE | AHdl::SW => IDC_SIZENESW,
+        AHdl::P0 | AHdl::P1 => IDC_CROSS,
     }
 }
 

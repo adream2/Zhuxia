@@ -325,15 +325,17 @@ pub fn draw_icon(cv: &mut Canvas, icon: Icon, cx: f32, cy: f32, size: f32, color
 
     match icon {
         Icon::Pointer => {
-            let pts = [
-                at(5.0, 3.0),
-                at(19.0, 10.5),
-                at(13.0, 12.0),
-                at(11.0, 19.0),
-                at(8.0, 12.5),
-                at(5.0, 15.0),
-            ];
-            cv.fill_polygon_stroked(&pts, color, color, (1.2 * k).max(1.0 * s));
+            // 经典鼠标指针：尖端左上、底角左下、右侧缺口。
+            //
+            // 旧的六点版本尾巴收成一个不到 1px 的尖刺（D(11,19)→E(8,12.5) 两条边只差
+            // 两三个像素），圆弧描边在这个尺寸下直接消失，16px 时看着就像「缺了一块」。
+            // 这里换成四点实心轮廓，整枚图标占满 24 格，任意缩放下都能闭合。
+            let pts = [at(3.5, 3.0), at(10.8, 20.2), at(13.4, 12.9), at(20.5, 10.2)];
+            cv.fill_polygon(&pts, color);
+            // 描边必须显式闭合：`fill_polygon_stroked` 只连 windows(2)，会漏掉最后一条边。
+            for i in 0..pts.len() {
+                stroke(cv, pts[i], pts[(i + 1) % pts.len()], w, color);
+            }
         }
         Icon::Square => {
             let (x, y) = at(3.5, 3.5);

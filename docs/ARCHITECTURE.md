@@ -93,3 +93,48 @@ zhuxia.exe --settings（面板，按需启动）
 4. 在设置面板增加页面与导航项。
 
 模块不得直接依赖其他业务 crate；跨模块动作通过宿主注入的钩子完成。
+
+## 版本号
+
+`major.minor.patch`，三位各有含义，写版本时按这个来（不对外解释，界面只显示数字）：
+
+- **最右位（patch）**：0 = 正式版，1 = 预览版。预览版不承诺行为稳定。
+- **中间位（minor）**：功能有增减就 +1；同时把最右位归 0。
+- **最左位（major）**：发生不兼容的重大改变才 +1。
+
+例：`1.0.0` 首个正式版 → `1.1.0` 稳定小改 → `1.1.1` 新增功能但尚未稳定。
+
+### 发版
+
+版本号只有一处真源：`Cargo.toml` 的 `[workspace.package] version`。exe 的 VERSIONINFO
+由 `crates/zhuxia/build.rs` 从 `CARGO_PKG_VERSION` 生成，界面显示的版本号也来自同一个值，
+所以改版本只需要动 `Cargo.toml`（连带 `Cargo.lock` 与 `crates/zhuxia/tauri.conf.json`）。
+
+```text
+改版本 → 本地 cargo build 更新 Cargo.lock → 推送
+       → Actions「发布构建」手动触发，输入版本号
+       → 校验 → 编译打包 → 建 v<版本> 标签 → 发 Release
+```
+
+`release.yml` 只有 `workflow_dispatch` 一个入口，三个输入：
+
+| 输入 | 说明 |
+| --- | --- |
+| `version` | 目标版本，必须与 `Cargo.toml` 完全一致；最右位 0/1 决定正式还是预览 |
+| `create_release` | 是否建标签并发 Release；关掉就只产出可下载的构建产物 |
+| `draft` | Release 先存草稿，人工确认后再公开 |
+
+触发后先跑校验，任一条不满足直接失败：格式是 `x.y.z`、最右位只能是 0/1、
+`Cargo.toml`/`Cargo.lock`/`tauri.conf.json` 三处版本一致、标签 `v<版本>` 不存在、
+不低于已发布的最新版本。校验通过后才编译，并用 `ProductVersion` 反查 exe 内嵌版本是否等于目标版本。
+
+产物命名全部由同一个版本号派生，和标签严格对应：
+
+| 产物 | 文件 |
+| --- | --- |
+| 标签 / Release | `v<版本>`（最右位 1 自动标 prerelease） |
+| 运行产物 | `zhuxia-<版本>-win-x64.zip`（exe + 许可/声明/README） |
+| 源码包 | `zhuxia-<版本>-src.zip`（`git archive` 该提交，带顶层目录） |
+| 校验和 | `SHA256SUMS.txt` |
+
+归档：Artifact 保留 30 天；发布时三个文件作为 Release asset 长期保存。

@@ -1,0 +1,252 @@
+name: 发布构建
+
+# 只允许手动触发：发版是人的决定，机器只做「校验 → 编译 → 打包 → 建标签 → 发 Release」。
+#
+# 三者共用同一个版本号（`validate` 的 outputs.version），任何一处对不上就直接失败：
+#   · 标签 / Release：v<version>，预览版（最右位 1）自动标成 prerelease
+#   · 运行产物：zhuxia-<version>-win-x64.zip
+#   · 源码包：  zhuxia-<version>-src.zip
+#
+# 版本号只有一个真源：Cargo.toml 的 [workspace.package] version。
+# exe 的 VERSIONINFO 由 crates/zhuxia/build.rs 从 CARGO_PKG_VERSION 生成，
+# 界面里的版本号也来自同一个值，所以发版只需要改 Cargo.toml（+ Cargo.lock + tauri.conf.json）。
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "目标版本号，必须与 Cargo.toml 的 [workspace.package] version 一致；最右位 0=正式 / 1=预览"
+        required: true
+        type: string
+      create_release:
+        description: "创建 v<版本> 标签并发布 GitHub Release；关闭则只产出可下载的构建产物"
+        required: true
+        type: boolean
+        default: true
+      draft:
+        description: "Release 存为草稿，人工确认后再公开（仅 create_release=true 时生效）"
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+# 同一个版本号不允许并发跑两遍（会抢标签）
+concurrency:
+  group: release-${{ inputs.version }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  # 单次构建用不上增量，关掉省缓存体积
+  CARGO_INCREMENTAL: "0"
+
+jobs:
+  validate:
+    name: 版本号校验
+    runs-on: windows-latest
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+      tag: ${{ steps.check.outputs.tag }}
+      channel: ${{ steps.check.outputs.channel }}
+      prerelease: ${{ steps.check.outputs.prerelease }}
+      zip: ${{ steps.check.outputs.zip }}
+      src_zip: ${{ steps.check.outputs.src_zip }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # 要拿全部标签来判断版本高低、查重
+          fetch-depth: 0
+
+      - id: check
+        name: 校验输入 / 真源 / 标签 / 版本高低
+        shell: bash
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          fail() {
+            echo "::error title=版本号校验失败::$1"
+            echo "❌ $1" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          }
+
+          V="$(printf '%s' "$INPUT_VERSION" | tr -d '[:space:]')"
+
+          # 1. 格式：只接受 major.minor.patch
+          if [[ ! "$V" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+            fail "版本号必须是 x.y.z 三段数字，收到「$V」"
+          fi
+          PATCH="${BASH_REMATCH[3]}"
+
+          # 2. 项目规则：最右位 0=正式、1=预览（docs/ARCHITECTURE.md「版本号」）
+          if [[ "$PATCH" != "0" && "$PATCH" != "1" ]]; then
+            fail "最右位只能是 0（正式）或 1（预览），收到 $V 的最右位 $PATCH"
+          fi
+
+          # 3. 单一真源必须同步：Cargo.toml → Cargo.lock → tauri.conf.json
+          CARGO_V="$(grep -A20 '^\[workspace.package\]' Cargo.toml | grep -m1 '^version' | sed 's/[^0-9.]//g')"
+          LOCK_V="$(grep -A2 '^name = "zhuxia"$' Cargo.lock | grep -m1 '^version' | sed 's/[^0-9.]//g')"
+          TAURI_V="$(grep -m1 '"version"' crates/zhuxia/tauri.conf.json | sed 's/[^0-9.]//g')"
+          [[ "$CARGO_V" == "$V" ]] || fail "Cargo.toml 的 workspace version 是 $CARGO_V，与输入 $V 不一致；先把源码版本改好再触发"
+          [[ "$LOCK_V" == "$V" ]] || fail "Cargo.lock 里的 zhuxia 还是 $LOCK_V；本地跑一次 cargo build 让锁文件跟上并提交"
+          [[ "$TAURI_V" == "$V" ]] || fail "crates/zhuxia/tauri.conf.json 的 version 是 $TAURI_V，应为 $V"
+
+          # 4. 标签查重 + 版本不能倒退
+          TAG="v$V"
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            fail "标签 $TAG 已存在；同一版本不能重复发布"
+          fi
+          LATEST="$(git tag -l 'v*' | sed 's/^v//' | sort -V | tail -1)"
+          if [[ -n "$LATEST" ]]; then
+            HIGHEST="$(printf '%s\n%s\n' "$LATEST" "$V" | sort -V | tail -1)"
+            [[ "$HIGHEST" == "$V" ]] || fail "版本 $V 低于已发布的最新版本 $LATEST"
+          fi
+
+          # 5. 派生出后面的命名与 Release 属性，全部来自同一个 $V
+          if [[ "$PATCH" == "0" ]]; then CHANNEL="正式版"; PRE="false"; else CHANNEL="预览版"; PRE="true"; fi
+          {
+            echo "version=$V"
+            echo "tag=$TAG"
+            echo "channel=$CHANNEL"
+            echo "prerelease=$PRE"
+            echo "zip=zhuxia-$V-win-x64.zip"
+            echo "src_zip=zhuxia-$V-src.zip"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "## 发布前校验通过"
+            echo ""
+            echo "| 项 | 值 |"
+            echo "| --- | --- |"
+            echo "| 版本号 | \`$V\` |"
+            echo "| 类型 | $CHANNEL（prerelease=$PRE） |"
+            echo "| 标签 / Release | \`$TAG\` |"
+            echo "| 运行产物 | \`zhuxia-$V-win-x64.zip\` |"
+            echo "| 源码包 | \`zhuxia-$V-src.zip\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  build:
+    name: 编译与打包
+    needs: validate
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 缓存 cargo 依赖
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: 工具链信息
+        shell: pwsh
+        run: |
+          rustc -V
+          cargo -V
+
+      - name: 单元测试
+        run: cargo test --workspace --locked
+
+      - name: 编译 release
+        run: cargo build --release --locked --bin zhuxia
+
+      - name: 校验 exe 内嵌版本号
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          $info = (Get-Item "target/release/zhuxia.exe").VersionInfo
+          "FileVersion=$($info.FileVersion) ProductVersion=$($info.ProductVersion)"
+          if ($info.ProductVersion -ne $env:VERSION) {
+            Write-Error "exe 的 ProductVersion 是 '$($info.ProductVersion)'，与目标版本 '$env:VERSION' 不一致（应由 build.rs 从 Cargo.toml 生成）"
+            exit 1
+          }
+
+      - name: 打包（运行产物 + 源码包 + 校验和）
+        shell: bash
+        env:
+          VERSION: ${{ needs.validate.outputs.version }}
+          ZIP: ${{ needs.validate.outputs.zip }}
+          SRC_ZIP: ${{ needs.validate.outputs.src_zip }}
+        run: |
+          set -euo pipefail
+          rm -rf dist "$ZIP" "$SRC_ZIP" SHA256SUMS.txt
+          mkdir -p dist
+          # 运行时只需要 exe：图标、VERSIONINFO、设置面板的前端资源都已内嵌
+          cp target/release/zhuxia.exe dist/
+          cp LICENSE NOTICE THIRD_PARTY_NOTICES.md README.md dist/
+          powershell -NoProfile -Command "Compress-Archive -Path 'dist\*' -DestinationPath '$ZIP' -CompressionLevel Optimal -Force"
+          # 源码包与该标签指向同一个提交
+          git archive --format=zip --prefix="zhuxia-$VERSION/" -o "$SRC_ZIP" HEAD
+          sha256sum "$ZIP" "$SRC_ZIP" > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+          du -h "$ZIP" "$SRC_ZIP"
+
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: zhuxia-${{ needs.validate.outputs.version }}
+          path: |
+            ${{ needs.validate.outputs.zip }}
+            ${{ needs.validate.outputs.src_zip }}
+            SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: 写入汇总
+        shell: bash
+        env:
+          VERSION: ${{ needs.validate.outputs.version }}
+          ZIP: ${{ needs.validate.outputs.zip }}
+          SRC_ZIP: ${{ needs.validate.outputs.src_zip }}
+        run: |
+          {
+            echo "## 构建产物"
+            echo ""
+            echo '```'
+            cat SHA256SUMS.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  release:
+    name: 建标签并发布
+    needs: [validate, build]
+    if: ${{ inputs.create_release }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: zhuxia-${{ needs.validate.outputs.version }}
+
+      - name: gh release create
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # 这个 job 没有 checkout，gh 无法从工作目录推断仓库
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.validate.outputs.tag }}
+          CHANNEL: ${{ needs.validate.outputs.channel }}
+          PRERELEASE: ${{ needs.validate.outputs.prerelease }}
+          DRAFT: ${{ inputs.draft }}
+          ZIP: ${{ needs.validate.outputs.zip }}
+          SRC_ZIP: ${{ needs.validate.outputs.src_zip }}
+        run: |
+          set -euo pipefail
+          EXTRA=()
+          if [[ "$PRERELEASE" == "true" ]]; then EXTRA+=(--prerelease); fi
+          if [[ "$DRAFT" == "true" ]]; then EXTRA+=(--draft); fi
+          # --target 让标签落在触发这次构建的提交上，和源码包/产物同源
+          gh release create "$TAG" \
+            "$ZIP" "$SRC_ZIP" SHA256SUMS.txt \
+            --target "$GITHUB_SHA" \
+            --title "$TAG（$CHANNEL）" \
+            --generate-notes \
+            "${EXTRA[@]}"
+          echo "发布完成：$TAG" >> "$GITHUB_STEP_SUMMARY"

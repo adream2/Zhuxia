@@ -1,10 +1,14 @@
 #pragma code_page(65001)
 
-1 ICON "../../assets/icons/zhuxia.ico"
+// 版本号不写死：build.rs 用 `CARGO_PKG_VERSION`（= Cargo.toml 的 workspace version）
+// 把版本占位符换成实际版本、图标路径换成绝对路径后编译。
+// 手改这里的占位符没有意义，改版本请改 Cargo.toml。
+
+1 ICON "@ICON@"
 
 1 VERSIONINFO
-FILEVERSION 0,0,1,0
-PRODUCTVERSION 0,0,1,0
+FILEVERSION @VERSION4@
+PRODUCTVERSION @VERSION4@
 FILEOS 0x40004
 FILETYPE 0x1
 BEGIN
@@ -14,11 +18,11 @@ BEGIN
     BEGIN
       VALUE "CompanyName", "Zhuxia"
       VALUE "FileDescription", "驻匣 Zhuxia - 常驻系统监视"
-      VALUE "FileVersion", "0.0.1"
+      VALUE "FileVersion", "@VERSION@"
       VALUE "InternalName", "zhuxia"
       VALUE "OriginalFilename", "zhuxia.exe"
       VALUE "ProductName", "驻匣 Zhuxia"
-      VALUE "ProductVersion", "0.0.1"
+      VALUE "ProductVersion", "@VERSION@"
     END
   END
   BLOCK "VarFileInfo"
