@@ -7,6 +7,7 @@ pub mod fmt;
 pub mod hotkey;
 pub mod log;
 pub mod monitor;
+pub mod shell;
 pub mod win;
 
 pub use monitor::{displays, DisplayInfo};
