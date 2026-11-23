@@ -98,6 +98,14 @@ img, svg { display: block; max-width: 100%; }
 }
 
 .brand svg { width: 28px; height: 28px; }
+
+/* 站点图标直接用软件图标（assets/icons/png/zhuxia-64.png） */
+.brand .mark {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  box-shadow: 0 3px 10px -3px rgba(0, 0, 0, 0.75);
+}
 .brand .en { color: var(--faint); font-weight: 500; font-size: 13px; letter-spacing: 0.12em; }
 
 .nav nav {
@@ -337,6 +345,20 @@ h1 em {
 
 .hl h3 { margin: 0 0 8px; font-size: 15.5px; }
 .hl p { margin: 0; color: var(--dim); font-size: 13.5px; }
+
+/* ---------------------------------------------------------------- 常见问题 */
+
+.faq { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+
+.qa {
+  padding: 20px 22px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.qa h3 { margin: 0 0 8px; font-size: 15px; line-height: 1.5; }
+.qa p { margin: 0; color: var(--dim); font-size: 13.5px; }
 
 /* ---------------------------------------------------------------- 下载 */
 

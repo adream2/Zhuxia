@@ -5,23 +5,54 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{TITLE}}</title>
 <meta name="description" content="{{DESC}}">
+<link rel="canonical" href="{{SITE_URL}}">
+<meta name="robots" content="index,follow,max-snippet:-1,max-image-preview:large,max-video-preview:-1">
+<meta name="author" content="Zhuxia">
+<meta name="application-name" content="驻匣 Zhuxia">
 <meta name="theme-color" content="#0b0d10">
+<meta name="format-detection" content="telephone=no">
+
+<!-- Open Graph / 社交分享 -->
 <meta property="og:type" content="website">
+<meta property="og:site_name" content="驻匣 Zhuxia">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:url" content="{{SITE_URL}}">
 <meta property="og:title" content="{{TITLE}}">
 <meta property="og:description" content="{{DESC}}">
-<meta property="og:image" content="assets/hero.svg">
-<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<meta property="og:image" content="{{SITE_URL}}assets/og.png">
+<meta property="og:image:type" content="image/png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="驻匣 Zhuxia 应用图标">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="{{TITLE}}">
+<meta name="twitter:description" content="{{DESC}}">
+<meta name="twitter:image" content="{{SITE_URL}}assets/og.png">
+
+<!-- 站点图标 = 软件图标 -->
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="assets/icon-32.png">
+<link rel="icon" type="image/png" sizes="256x256" href="assets/icon-256.png">
+<link rel="apple-touch-icon" href="assets/icon-256.png">
+<link rel="manifest" href="site.webmanifest">
+<link rel="alternate" type="application/rss+xml" title="驻匣更新日志" href="feed.xml">
+<link rel="sitemap" type="application/xml" href="sitemap.xml">
 <link rel="stylesheet" href="style.css">
+{{JSONLD}}
 </head>
 <body>
 
 <header class="nav">
   <div class="wrap">
-    <a class="brand" href="#top">{{LOGO}}<span>驻匣</span><span class="en">ZHU XIA</span></a>
-    <nav>
+    <a class="brand" href="#top">
+      <img class="mark" src="assets/icon-64.png" alt="驻匣图标" width="28" height="28">
+      <span>驻匣</span><span class="en">ZHU XIA</span>
+    </a>
+    <nav aria-label="主导航">
       <a href="#features">功能</a>
       <a href="#shots">界面</a>
       <a href="#download">下载</a>
+      <a href="#faq">问答</a>
       <a href="#changelog">更新日志</a>
       <a class="gh" href="{{REPO}}" target="_blank" rel="noopener">GitHub</a>
     </nav>
@@ -43,46 +74,54 @@
         <ul class="stats">{{STATS}}</ul>
       </div>
       <div class="hero-art">
-        <img src="assets/hero.svg" alt="任务栏系统监视与按进程网速示意" width="560" height="300">
+        <img src="assets/hero.svg" alt="任务栏系统监视、按进程网速与剪贴板历史示意" width="560" height="300">
       </div>
     </div>
   </section>
 
-  <section class="section" id="features">
+  <section class="section" id="features" aria-labelledby="features-h">
     <div class="wrap">
-      <h2>八件事，一个进程</h2>
+      <h2 id="features-h">八件事，一个进程</h2>
       <p class="lead">每个模块都能单独开关；不开的模块不占线程、不占内存。常驻部分只有采样与绘制，设置面板按需启动。</p>
       <div class="grid features">{{FEATURES}}</div>
     </div>
   </section>
 
-  <section class="section" id="shots">
+  <section class="section" id="shots" aria-labelledby="shots-h">
     <div class="wrap">
-      <h2>界面长这样</h2>
+      <h2 id="shots-h">界面长这样</h2>
       <p class="lead">原生绘制，没有一层网页壳。下面是按真实布局与配色生成的界面示意。</p>
       <div class="grid shots">{{SHOTS}}</div>
     </div>
   </section>
 
-  <section class="section">
+  <section class="section" aria-label="产品特点">
     <div class="wrap">
       <div class="highlights">{{HIGHLIGHTS}}</div>
     </div>
   </section>
 
-  <section class="section" id="download">
+  <section class="section" id="download" aria-labelledby="download-h">
     <div class="wrap">
-      <h2>下载</h2>
+      <h2 id="download-h">下载</h2>
       <p class="lead">Windows 10 / 11 x64 · 免安装 · 解压即用。正式版与预览版分开提供，预览版可能带有尚未稳定的新功能。</p>
       <div class="grid downloads">{{DOWNLOADS}}</div>
       <p class="fineprint">全部版本见 <a href="{{RELEASES}}" target="_blank" rel="noopener">GitHub Releases</a>；源码包与 SHA256 校验和随每个版本一并发布。许可证 Apache-2.0，第三方组件声明见仓库 THIRD_PARTY_NOTICES.md。</p>
     </div>
   </section>
 
-  <section class="section" id="changelog">
+  <section class="section" id="faq" aria-labelledby="faq-h">
     <div class="wrap">
-      <h2>更新日志</h2>
-      <p class="lead">由 git 提交历史按版本自动汇总，发布即更新。</p>
+      <h2 id="faq-h">常见问题</h2>
+      <p class="lead">一句话能答完的就不写两段。</p>
+      <div class="faq">{{FAQ}}</div>
+    </div>
+  </section>
+
+  <section class="section" id="changelog" aria-labelledby="changelog-h">
+    <div class="wrap">
+      <h2 id="changelog-h">更新日志</h2>
+      <p class="lead">由 git 提交历史按版本自动汇总，发布即更新。<a href="feed.xml">RSS</a></p>
       <ol class="timeline">{{CHANGELOG}}</ol>
     </div>
   </section>

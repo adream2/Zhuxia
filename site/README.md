@@ -71,3 +71,41 @@ site/
   template.html   # 页面骨架（{{占位符}} 由 build.py 替换）
   style.css       # 样式
 ```
+
+## SEO / GEO
+
+页面除了给人看，也要让搜索引擎和生成式引擎读得懂。以下产物全部在构建时生成：
+
+| 产物 | 作用 |
+| --- | --- |
+| title / description / canonical | 基础收录信息，canonical 用 SITE_URL 拼绝对地址 |
+| Open Graph + Twitter Card | 分享卡片，配 `assets/og.png`（1200×630） |
+| JSON-LD | `SoftwareApplication` / `WebSite` / `FAQPage` 三段结构化数据 |
+| `robots.txt` | 显式放行 GPTBot、ClaudeBot、PerplexityBot、Google-Extended 等抓取器 |
+| `sitemap.xml` | 单页站点地图，lastmod = 构建日期 |
+| `llms.txt` | 给大模型看的站点摘要（llmstxt.org 约定）：基本信息、功能、下载、版本规则、FAQ |
+| `feed.xml` | 每个版本一条 RSS，更新日志的机器可读版本 |
+| `site.webmanifest` | 名称、主题色、图标，支持添加到桌面 |
+
+GEO 的写法约定：每条 FAQ 都是「一句问 + 一段能直接摘走的事实陈述」，不写「可能」「或许」；
+首屏摘要一句话讲清平台、功能范围、技术栈与授权，方便被整段引用。
+
+`og.png` 由 `art.og_image()` 用标准库现场生成（渐变 + 网格 + 居中的应用图标），
+不依赖 Pillow，也不为中文标题往仓库里塞字体——标题交给 `og:title`。
+
+## 站点图标
+
+直接用软件自己的图标，不另画一套，避免与 exe 图标不一致：
+
+| 用途 | 文件 |
+| --- | --- |
+| 浏览器标签（多尺寸） | `favicon.ico` ← `assets/icons/zhuxia.ico` |
+| 标签页 / 导航栏 | `assets/icon-32.png`、`assets/icon-64.png` |
+| apple-touch-icon | `assets/icon-256.png` |
+| manifest / 桌面图标 | `assets/icon-256.png`、`assets/icon-512.png` |
+
+## 站点根地址
+
+`SITE_URL` 环境变量决定 canonical / og:url / sitemap 里的绝对地址。CI 里由
+`configure-pages` 的 `base_url` 传入，换自定义域名后自动跟着变；本地缺省按
+`https://<owner>.github.io/<repo>/` 推断。

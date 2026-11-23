@@ -36,12 +36,15 @@ jobs:
           # 更新日志要用到全部标签与提交历史
           fetch-depth: 0
 
-      - uses: actions/configure-pages@v5
+      - id: pages
+        uses: actions/configure-pages@v5
 
       - name: 生成 _site
         env:
           # 读发布列表与资源链接（公开仓库只读即可）
           GH_TOKEN: ${{ github.token }}
+          # canonical / og:url / sitemap 需要绝对地址；自定义域名时这里自动跟着变
+          SITE_URL: ${{ steps.pages.outputs.base_url }}/
         run: python3 site/build.py --out _site
 
       - name: 检查产物

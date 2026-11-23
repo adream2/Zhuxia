@@ -5,12 +5,15 @@
   · 版本号        → Cargo.toml 的 [workspace.package] version
   · 发布列表/日期  → `gh api .../releases`（有 GH_TOKEN 时）或 git 标签
   · 更新日志       → git 提交历史（相邻标签之间的提交标题）
-  · 视觉素材       → site/art.py 现场生成 SVG
+  · 视觉素材       → site/art.py 现场生成 SVG + OG 位图
+  · 站点图标       → assets/icons/ 下的软件图标（ico 与各尺寸 png）
 
-输出：_site/（index.html + style.css + favicon.svg + assets/*.svg）
+输出：_site/ —— index.html、style.css、图标、素材，以及给搜索引擎/生成式引擎的
+robots.txt、sitemap.xml、llms.txt、feed.xml、site.webmanifest。
 
 用法：
   python3 site/build.py [--out _site]
+  SITE_URL=https://example.com/ python3 site/build.py     # 显式指定站点根地址
 """
 
 from __future__ import annotations
@@ -33,6 +36,7 @@ import content  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 SITE = Path(__file__).resolve().parent
+ICONS = ROOT / "assets" / "icons"
 
 
 # ---------------------------------------------------------------- 基础工具
@@ -72,6 +76,21 @@ def repo_slug() -> str:
     return m.group(1) if m else "adream2/Zhuxia"
 
 
+def site_url(slug: str) -> str:
+    """站点根地址（带结尾斜杠）。canonical / og:url / sitemap 都要绝对地址。
+
+    优先级：SITE_URL 环境变量（CI 里由 configure-pages 的 base_url 传进来）
+    → GitHub Pages 项目页默认地址。
+    """
+    env = os.environ.get("SITE_URL", "").strip()
+    if env:
+        return env if env.endswith("/") else env + "/"
+    owner, _, name = slug.partition("/")
+    if name.lower() == f"{owner.lower()}.github.io":
+        return f"https://{owner}.github.io/"
+    return f"https://{owner.lower()}.github.io/{name}/"
+
+
 def parse_version(tag: str) -> tuple[int, int, int] | None:
     m = re.fullmatch(r"v?(\d+)\.(\d+)\.(\d+)", tag.strip())
     return (int(m.group(1)), int(m.group(2)), int(m.group(3))) if m else None
@@ -80,6 +99,10 @@ def parse_version(tag: str) -> tuple[int, int, int] | None:
 def channel_of(ver: tuple[int, int, int]) -> str:
     """最右位 0=正式、1=预览（docs/ARCHITECTURE.md「版本号」）。"""
     return "stable" if ver[2] == 0 else "preview"
+
+
+def vstr(ver: tuple[int, int, int]) -> str:
+    return ".".join(str(x) for x in ver)
 
 
 # ---------------------------------------------------------------- 数据采集
@@ -156,10 +179,19 @@ def head_commits(limit: int = 8) -> list[str]:
     return [ln.strip() for ln in raw.splitlines() if ln.strip()]
 
 
+def release_notes(rel: list[dict]) -> list[tuple[dict, list[str]]]:
+    """[(release, 该版本的提交标题)]，更新日志、RSS、llms.txt 共用。"""
+    out = []
+    for i, r in enumerate(rel):
+        prev_tag = rel[i + 1]["tag"] if i + 1 < len(rel) else None
+        out.append((r, commits_between(prev_tag, r["tag"])))
+    return out
+
+
 # ---------------------------------------------------------------- 图标
 
 
-ICONS = {
+ICONS_SVG = {
     "monitor": '<rect x="2.5" y="4" width="19" height="13" rx="2"/><path d="M7 21h10M12 17v4"/>'
     '<path d="M6 12l3-4 3 3 3-5 3 6"/>',
     "clipboard": '<rect x="6" y="4" width="12" height="17" rx="2"/>'
@@ -190,9 +222,9 @@ def render_stats() -> str:
 def render_features() -> str:
     out = []
     for key, title, desc in content.FEATURES:
-        icon = ICONS.get(key, ICONS["monitor"])
+        icon = ICONS_SVG.get(key, ICONS_SVG["monitor"])
         out.append(
-            f'<article class="card"><div class="ico"><svg viewBox="0 0 24 24" '
+            f'<article class="card"><div class="ico"><svg viewBox="0 0 24 24" aria-hidden="true" '
             f'stroke-linecap="round" stroke-linejoin="round">{icon}</svg></div>'
             f"<h3>{esc(title)}</h3><p>{esc(desc)}</p></article>"
         )
@@ -200,11 +232,14 @@ def render_features() -> str:
 
 
 def render_shots() -> str:
+    dims = {"capture": (900, 520), "clipboard": (540, 420), "settings": (540, 420)}
     out = []
     for i, (key, title, desc) in enumerate(content.SHOTS):
         cls = "shot wide" if i == 0 else "shot"
+        w, h = dims.get(key, (540, 420))
         out.append(
-            f'<figure class="{cls}"><img src="assets/{key}.svg" alt="{esc(title)}" loading="lazy">'
+            f'<figure class="{cls}"><img src="assets/{key}.svg" alt="{esc(title)}：{esc(desc)}" '
+            f'width="{w}" height="{h}" loading="lazy" decoding="async">'
             f"<figcaption><strong>{esc(title)}</strong><span>{esc(desc)}</span></figcaption></figure>"
         )
     return "".join(out)
@@ -214,6 +249,15 @@ def render_highlights() -> str:
     return "".join(
         f'<div class="hl"><h3>{esc(t)}</h3><p>{esc(d)}</p></div>' for t, d in content.HIGHLIGHTS
     )
+
+
+def render_faq() -> str:
+    out = []
+    for q, a in content.FAQ:
+        out.append(
+            f'<div class="qa"><h3>{esc(q)}</h3><p>{esc(a)}</p></div>'
+        )
+    return "".join(out)
 
 
 def human_size(n: int) -> str:
@@ -226,11 +270,24 @@ def human_size(n: int) -> str:
     return ""
 
 
-def render_downloads(rel: list[dict], slug: str, version: str) -> str:
-    latest = {}
-    for r in rel:  # rel 已按版本降序
+def latest_by_channel(rel: list[dict]) -> dict[str, dict]:
+    latest: dict[str, dict] = {}
+    for r in rel:  # 已按版本降序
         latest.setdefault(channel_of(r["ver"]), r)
+    return latest
 
+
+def download_url(r: dict | None, slug: str) -> str:
+    if not r:
+        return f"https://github.com/{slug}/releases"
+    zip_name = f"zhuxia-{vstr(r['ver'])}-win-x64.zip"
+    return r["assets"].get(zip_name) or next(
+        (u for n, u in r["assets"].items() if n.endswith("win-x64.zip")), r["url"]
+    )
+
+
+def render_downloads(rel: list[dict], slug: str, version: str) -> str:
+    latest = latest_by_channel(rel)
     cards = []
     for ch, title, tag, klass in (
         ("stable", "正式版", "稳定", "stable"),
@@ -238,13 +295,11 @@ def render_downloads(rel: list[dict], slug: str, version: str) -> str:
     ):
         r = latest.get(ch)
         if r:
-            ver = "v" + ".".join(str(x) for x in r["ver"])
-            zip_name = f'zhuxia-{".".join(str(x) for x in r["ver"])}-win-x64.zip'
-            url = r["assets"].get(zip_name) or next(
-                (u for n, u in r["assets"].items() if n.endswith("win-x64.zip")), r["url"]
-            )
+            ver = "v" + vstr(r["ver"])
+            zip_name = f"zhuxia-{vstr(r['ver'])}-win-x64.zip"
+            url = download_url(r, slug)
             size = human_size(r.get("sizes", {}).get(zip_name, 0))
-            meta = [f"Windows 10 / 11 x64", r["date"] or "—"]
+            meta = ["Windows 10 / 11 x64", r["date"] or "—"]
             if size:
                 meta.append(size)
             cards.append(
@@ -252,7 +307,7 @@ def render_downloads(rel: list[dict], slug: str, version: str) -> str:
                 f'<div class="ver">{esc(ver)}</div>'
                 f'<div class="meta">{"".join(f"<span>{esc(m)}</span>" for m in meta)}</div>'
                 f'<a class="btn {"primary" if klass == "stable" else "ghost"}" href="{esc(url)}" '
-                f'target="_blank" rel="noopener">下载 {esc(zip_name)}</a>'
+                f'target="_blank" rel="noopener" download>下载 {esc(zip_name)}</a>'
                 f'<p class="note">源码包与 SHA256SUMS.txt 见同一发布页</p></div>'
             )
         else:
@@ -273,18 +328,15 @@ def render_changelog(rel: list[dict], version: str) -> str:
         items = "".join(f"<li>{esc(c)}</li>" for c in commits) or "<li>仓库还没有可汇总的提交</li>"
         return (
             '<li class="new"><div class="rel"><div class="rel-head">'
-            f"<h3>v{esc(version)}</h3><span class=\"tag\">开发中</span>"
-            "<span class=\"tag\">预览</span></div>"
+            f'<h3>v{esc(version)}</h3><span class="tag">开发中</span>'
+            '<span class="tag">预览</span></div>'
             f"<ul>{items}</ul></div></li>"
         )
 
     out = []
-    for i, r in enumerate(rel):
-        prev_tag = rel[i + 1]["tag"] if i + 1 < len(rel) else None
-        commits = commits_between(prev_tag, r["tag"])
-        ver = "v" + ".".join(str(x) for x in r["ver"])
-        ch = channel_of(r["ver"])
-        label = "正式版" if ch == "stable" else "预览版"
+    for i, (r, commits) in enumerate(release_notes(rel)):
+        ver = "v" + vstr(r["ver"])
+        label = "正式版" if channel_of(r["ver"]) == "stable" else "预览版"
         items = "".join(f"<li>{esc(c)}</li>" for c in commits)
         if not items:
             items = "<li>该版本没有可汇总的变更条目</li>"
@@ -293,12 +345,235 @@ def render_changelog(rel: list[dict], version: str) -> str:
             if r["url"]
             else ""
         )
+        date = r["date"] or ""
+        when = f'<time datetime="{esc(date)}">{esc(date or "—")}</time>' if date else ""
         out.append(
             f'<li class="{"new" if i == 0 else ""}"><div class="rel"><div class="rel-head">'
-            f"<h3>{esc(ver)}</h3><span class=\"tag\">{label}</span>"
-            f'<time>{esc(r["date"] or "—")}</time>{link}</div><ul>{items}</ul></div></li>'
+            f'<h3>{esc(ver)}</h3><span class="tag">{label}</span>'
+            f"{when}{link}</div><ul>{items}</ul></div></li>"
         )
     return "".join(out)
+
+
+# ---------------------------------------------------------------- 结构化数据
+
+
+def render_jsonld(version: str, site: str, slug: str, rel: list[dict]) -> str:
+    repo = f"https://github.com/{slug}"
+    latest = latest_by_channel(rel)
+    # 有正式版就指向正式版，否则指向预览版，都没有就指向发布页
+    target = latest.get("stable") or latest.get("preview")
+    app = {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "驻匣",
+        "alternateName": ["Zhuxia", "驻匣 Zhuxia"],
+        "description": content.SUB,
+        "applicationCategory": "UtilitiesApplication",
+        "applicationSubCategory": "系统工具",
+        "operatingSystem": "Windows 10, Windows 11",
+        "processorRequirements": "x64",
+        "softwareVersion": vstr(target["ver"]) if target else version,
+        "inLanguage": "zh-CN",
+        "isAccessibleForFree": True,
+        "license": "https://www.apache.org/licenses/LICENSE-2.0",
+        "url": site,
+        "downloadUrl": download_url(target, slug),
+        "installUrl": f"{repo}/releases",
+        "screenshot": f"{site}assets/capture.svg",
+        "image": f"{site}assets/og.png",
+        "featureList": [f[1] for f in content.FEATURES],
+        "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "CNY",
+            "availability": "https://schema.org/InStock",
+        },
+        "author": {"@type": "Organization", "name": "Zhuxia", "url": repo},
+        "sameAs": [repo],
+    }
+    website = {
+        "@context": "https://schema.org",
+        "@type": "WebSite",
+        "name": "驻匣 Zhuxia",
+        "alternateName": "Zhuxia",
+        "url": site,
+        "inLanguage": "zh-CN",
+        "about": {"@type": "SoftwareApplication", "name": "驻匣"},
+    }
+    faq = {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        "mainEntity": [
+            {
+                "@type": "Question",
+                "name": q,
+                "acceptedAnswer": {"@type": "Answer", "text": a},
+            }
+            for q, a in content.FAQ
+        ],
+    }
+    data = json.dumps([app, website, faq], ensure_ascii=False, indent=2)
+    return f'<script type="application/ld+json">\n{data}\n</script>'
+
+
+# ---------------------------------------------------------------- 站点级文件
+
+
+def write_robots(out: Path, site: str) -> None:
+    """显式放行主流生成式引擎的抓取器——GEO 的前提是能被抓。"""
+    bots = [
+        "GPTBot", "OAI-SearchBot", "ChatGPT-User",
+        "ClaudeBot", "Claude-Web", "anthropic-ai",
+        "PerplexityBot", "Perplexity-User",
+        "Google-Extended", "Applebot-Extended",
+        "CCBot", "Bytespider", "Amazonbot", "cohere-ai",
+        "Bingbot", "Googlebot", "Baiduspider",
+    ]
+    lines = ["User-agent: *", "Allow: /", ""]
+    for b in bots:
+        lines += [f"User-agent: {b}", "Allow: /", ""]
+    lines += [f"Sitemap: {site}sitemap.xml", ""]
+    (out / "robots.txt").write_text("\n".join(lines), encoding="utf-8")
+
+
+def write_sitemap(out: Path, site: str, today: str) -> None:
+    xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+        "  <url>\n"
+        f"    <loc>{esc(site)}</loc>\n"
+        f"    <lastmod>{today}</lastmod>\n"
+        "    <changefreq>weekly</changefreq>\n"
+        "    <priority>1.0</priority>\n"
+        "  </url>\n"
+        "</urlset>\n"
+    )
+    (out / "sitemap.xml").write_text(xml, encoding="utf-8")
+
+
+def write_llms(out: Path, site: str, slug: str, version: str, rel: list[dict]) -> None:
+    """llms.txt：给大模型看的站点摘要（llmstxt.org 约定）。"""
+    repo = f"https://github.com/{slug}"
+    latest = latest_by_channel(rel)
+    stable = latest.get("stable")
+    preview = latest.get("preview")
+    lines = [
+        "# 驻匣 Zhuxia",
+        "",
+        f"> {content.SUB}",
+        "",
+        "## 基本信息",
+        "",
+        f"- 名称：{content.NAME}（{content.NAME_EN}）",
+        "- 平台：Windows 10 / Windows 11 x64",
+        "- 技术栈：Rust + Win32 原生绘制；设置面板用 Tauri 2（按需启动，不常驻）",
+        "- 授权：Apache License 2.0，免费使用，可商用",
+        f"- 源码：{repo}",
+        f"- 官网：{site}",
+        f"- 当前开发版本：{version}",
+        "",
+        "## 功能",
+        "",
+    ]
+    for _, title, desc in content.FEATURES:
+        lines.append(f"- **{title}**：{desc}")
+    lines += ["", "## 下载", ""]
+    if stable:
+        lines.append(f"- 正式版 v{vstr(stable['ver'])}：{download_url(stable, slug)}")
+    if preview:
+        lines.append(f"- 预览版 v{vstr(preview['ver'])}：{download_url(preview, slug)}")
+    if not stable and not preview:
+        lines.append(f"- 尚未发布：{repo}/releases")
+    lines += ["", "## 版本号规则", "",
+              "`major.minor.patch`：最右位 0 为正式版、1 为预览版；中间位功能增减时 +1 并归零最右位；"
+              "最左位仅在发生不兼容的重大改变时 +1。", ""]
+    notes = release_notes(rel)
+    if notes:
+        lines += ["## 最近版本", ""]
+        for r, commits in notes[:5]:
+            head = f"### v{vstr(r['ver'])}（{'正式版' if channel_of(r['ver']) == 'stable' else '预览版'}）"
+            lines.append(head)
+            if r["date"]:
+                lines.append(f"发布日期：{r['date']}")
+            lines.append("")
+            for c in commits[:8]:
+                lines.append(f"- {c}")
+            lines.append("")
+    lines += ["## 常见问题", ""]
+    for q, a in content.FAQ:
+        lines += [f"### {q}", "", a, ""]
+    (out / "llms.txt").write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+
+
+def write_feed(out: Path, site: str, slug: str, version: str, rel: list[dict]) -> None:
+    """RSS 2.0：每个版本一条，正文是变更列表。"""
+    now = datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S +0000")
+    items = []
+    notes = release_notes(rel)
+    if not notes:
+        body = "".join(f"<li>{esc(c)}</li>" for c in head_commits())
+        notes = [({"tag": f"v{version}", "ver": parse_version(version) or (0, 0, 0),
+                   "date": "", "url": f"https://github.com/{slug}/releases"}, [body])]
+    for r, commits in notes:
+        ver = "v" + vstr(r["ver"])
+        link = r["url"] or f"https://github.com/{slug}/releases/tag/{r['tag']}"
+        desc = "".join(f"<li>{esc(c)}</li>" for c in commits) or "<li>无变更条目</li>"
+        pub = (
+            f"<pubDate>{r['date']}T00:00:00Z</pubDate>" if r["date"] else ""
+        )
+        items.append(
+            "    <item>\n"
+            f"      <title>{esc(ver)}</title>\n"
+            f"      <link>{esc(link)}</link>\n"
+            f"      <guid isPermaLink=\"false\">{esc(link)}</guid>\n"
+            f"      {pub}\n"
+            f"      <description>{esc('<ul>' + desc + '</ul>')}</description>\n"
+            "    </item>"
+        )
+    xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">\n'
+        "  <channel>\n"
+        "    <title>驻匣 Zhuxia 更新日志</title>\n"
+        f"    <link>{esc(site)}</link>\n"
+        f"    <atom:link href=\"{esc(site)}feed.xml\" rel=\"self\" type=\"application/rss+xml\"/>\n"
+        "    <description>驻匣每个版本的变更条目</description>\n"
+        "    <language>zh-CN</language>\n"
+        f"    <lastBuildDate>{now}</lastBuildDate>\n"
+        + "\n".join(items)
+        + "\n  </channel>\n</rss>\n"
+    )
+    (out / "feed.xml").write_text(xml, encoding="utf-8")
+
+
+def write_manifest(out: Path) -> None:
+    data = {
+        "name": "驻匣 Zhuxia",
+        "short_name": "驻匣",
+        "description": content.SUB,
+        "lang": "zh-CN",
+        "start_url": "./",
+        "scope": "./",
+        "display": "standalone",
+        "background_color": "#0b0d10",
+        "theme_color": "#0b0d10",
+        "icons": [
+            {"src": "assets/icon-256.png", "sizes": "256x256", "type": "image/png", "purpose": "any"},
+            {"src": "assets/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+        ],
+    }
+    (out / "site.webmanifest").write_text(
+        json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+
+
+def copy_icons(out: Path) -> None:
+    """站点图标直接用软件自己的图标，不再单独画一套。"""
+    src = ICONS / "png"
+    shutil.copyfile(ICONS / "zhuxia.ico", out / "favicon.ico")
+    for size in (32, 64, 256, 512):
+        shutil.copyfile(src / f"zhuxia-{size}.png", out / "assets" / f"icon-{size}.png")
 
 
 # ---------------------------------------------------------------- 主流程
@@ -311,10 +586,12 @@ def main() -> int:
 
     version = workspace_version()
     slug = repo_slug()
+    site = site_url(slug)
     repo = f"https://github.com/{slug}"
     releases = collect_releases(slug)
     ver_tuple = parse_version(version) or (0, 0, 0)
     channel = "正式版" if channel_of(ver_tuple) == "stable" else "预览版"
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
     out = (ROOT / args.out).resolve()
     if out.exists():
@@ -330,17 +607,26 @@ def main() -> int:
     # 视觉素材
     for name in ("hero", "capture", "clipboard", "settings"):
         (out / "assets" / f"{name}.svg").write_text(art.ART[name](), encoding="utf-8")
-    (out / "favicon.svg").write_text(art.logo(40), encoding="utf-8")
+    art.og_image(ICONS / "png" / "zhuxia-1024.png", out / "assets" / "og.png")
+    copy_icons(out)
     shutil.copyfile(SITE / "style.css", out / "style.css")
+
+    # 站点级文件：SEO / GEO
+    write_robots(out, site)
+    write_sitemap(out, site, today)
+    write_llms(out, site, slug, version, releases)
+    write_feed(out, site, slug, version, releases)
+    write_manifest(out)
 
     tpl = (SITE / "template.html").read_text(encoding="utf-8")
     fields = {
         "TITLE": f"{content.NAME} {content.NAME_EN} · {content.TAGLINE}",
         "DESC": content.SUB,
         "SUB": esc(content.SUB),
-        "LOGO": art.logo(40),
+        "SITE_URL": site,
         "REPO": repo,
         "RELEASES": f"{repo}/releases",
+        "JSONLD": render_jsonld(version, site, slug, releases),
         "VERSION": version,
         "CHANNEL": channel,
         "CHANNEL_CLASS": "stable" if channel == "正式版" else "",
@@ -348,6 +634,7 @@ def main() -> int:
         "FEATURES": render_features(),
         "SHOTS": render_shots(),
         "HIGHLIGHTS": render_highlights(),
+        "FAQ": render_faq(),
         "DOWNLOADS": render_downloads(releases, slug, version),
         "CHANGELOG": render_changelog(releases, version),
         "BUILT_AT": datetime.now(timezone.utc).astimezone().strftime("%Y-%m-%d %H:%M"),
@@ -360,7 +647,7 @@ def main() -> int:
         raise SystemExit(f"模板里还有未替换的占位符：{sorted(set(leftover))}")
 
     (out / "index.html").write_text(page, encoding="utf-8")
-    print(f"已生成 {out / 'index.html'}（版本 {version} / {channel}，{len(releases)} 个发布）")
+    print(f"已生成 {out / 'index.html'}（版本 {version} / {channel}，{len(releases)} 个发布，站点 {site}）")
     return 0
 
 
