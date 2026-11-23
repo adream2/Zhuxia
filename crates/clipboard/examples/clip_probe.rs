@@ -1,9 +1,9 @@
 //! 剪贴板模块的离线探针（不启动宿主、不抢单实例）：
 //!
 //! ```text
-//! cargo run -p clipboard --example probe -- capture 20   # 监听 20 秒并打印记录
-//! cargo run -p clipboard --example probe -- shot out.png # 截一张主屏（验证界面）
-//! cargo run -p clipboard --example probe -- panel 30     # 直接打开面板并跑 30 秒消息循环
+//! cargo run -p clipboard --example clip_probe -- capture 20   # 监听 20 秒并打印记录
+//! cargo run -p clipboard --example clip_probe -- shot out.png # 截一张主屏（验证界面）
+//! cargo run -p clipboard --example clip_probe -- panel 30     # 直接打开面板并跑 30 秒消息循环
 //! ```
 
 unsafe extern "system" fn caret_target_proc(

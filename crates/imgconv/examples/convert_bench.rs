@@ -1,4 +1,4 @@
-//! 手工基准：`cargo run -p imgconv --example bench -- <图片> <目标格式>`
+//! 手工基准：`cargo run -p imgconv --example convert_bench -- <图片> <目标格式>`
 //!
 //! 用来盯住单张转换的耗时（解码 + 编码），也是"右键点下去多久出文件"的实测口径。
 

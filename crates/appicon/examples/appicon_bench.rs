@@ -1,4 +1,4 @@
-//! 单文件提取耗时：`cargo run --release -p appicon --example bench -- <文件>...`
+//! 单文件提取耗时：`cargo run --release -p appicon --example appicon_bench -- <文件>...`
 
 use std::path::PathBuf;
 use std::time::Instant;

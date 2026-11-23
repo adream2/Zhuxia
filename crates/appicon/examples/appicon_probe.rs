@@ -1,4 +1,4 @@
-//! 手工探针：`cargo run -p appicon --example probe -- <文件>...`
+//! 手工探针：`cargo run -p appicon --example appicon_probe -- <文件>...`
 //! 输出到临时目录，不改源文件。
 
 use std::path::PathBuf;
