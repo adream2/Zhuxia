@@ -3,7 +3,7 @@ resolver = "2"
 members = ["crates/zx-core", "crates/zx-ui", "crates/taskmon", "crates/clipboard", "crates/capture", "crates/gesture", "crates/imgconv", "crates/appicon", "crates/zx-media", "crates/imgbed", "crates/zhuxia"]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.0.2"
 edition = "2021"
 authors = ["Zhuxia"]
 license = "Apache-2.0"

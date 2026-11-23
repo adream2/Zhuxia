@@ -145,7 +145,7 @@ def parse_version(tag: str) -> tuple[int, int, int] | None:
 
 
 def channel_of(ver: tuple[int, int, int]) -> str:
-    """最右位 0=正式、1=预览（docs/ARCHITECTURE.md「版本号」）。"""
+    """最右位 0=正式、非 0=预览（docs/ARCHITECTURE.md「版本号」）。"""
     return "stable" if ver[2] == 0 else "preview"
 
 
