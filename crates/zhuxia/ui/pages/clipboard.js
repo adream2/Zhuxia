@@ -117,7 +117,7 @@ function pageClipboard() {
   c2.append(row("粘贴后置顶", "刚用过的记录回到列表最前", sw(v.moveToTopAfterPaste, (x) => cpatch({ moveToTopAfterPaste: x }))));
   c2.append(row("面板钉住", "面板失焦不自动关闭（下次打开生效）", sw(v.windowPinned, (x) => cpatch({ windowPinned: x }))));
   c2.append(row("暂停采集", "临时停止记录（不重启）", sw(v.pause, (x) => cpatch({ pause: x }))));
-  c2.append(row("接管 Win+V", "用低级键盘钩子吞掉系统快捷键，改为弹出本面板；与其它剪贴板工具可能冲突",
+  c2.append(row("接管 Win+V", "吞掉系统快捷键，改为弹出本面板（首次启动会问一次）；与其它剪贴板工具可能冲突",
     sw(v.takeoverWinV, (x) => cpatch({ takeoverWinV: x }))));
   frag.append(c2);
 

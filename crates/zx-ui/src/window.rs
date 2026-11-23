@@ -145,17 +145,23 @@ pub fn set_apps_dark(dark: bool) {
     }
 }
 
-/// 前台窗口是否全屏（盖住整个显示器、且不是桌面/任务栏自己）。
+/// 前台窗口是否**真·全屏**（盖住整个显示器、且不是桌面/任务栏自己）。
+///
+/// 两个必须排除的假阳性：
+/// - **最大化窗口**：`GetWindowRect` 会把不可见的边框算进去，比显示器还大一圈，
+///   只比矩形的话任何最大化窗口都会被当成全屏（任务栏自动隐藏时更明显）；
+/// - **桌面/任务栏**：它们的窗口本来就跟屏幕一样大。
 pub fn foreground_fullscreen() -> bool {
     unsafe {
         let fg = GetForegroundWindow();
         if fg.is_invalid() { return false; }
-        let cls = wide("Shell_TrayWnd");
         let mut buf = [0u16; 128];
         let n = GetClassNameW(fg, &mut buf);
         let name = String::from_utf16_lossy(&buf[..n.max(0) as usize]);
         if name == "Shell_TrayWnd" || name == "WorkerW" || name == "Progman" { return false; }
-        let _ = cls;
+        // 最大化 ≠ 全屏：先按窗口状态排除，再比矩形
+        if windows::Win32::UI::WindowsAndMessaging::IsZoomed(fg).as_bool() { return false; }
+        if windows::Win32::UI::WindowsAndMessaging::IsIconic(fg).as_bool() { return false; }
 
         let mut r = RECT::default();
         if GetWindowRect(fg, &mut r).is_err() { return false; }

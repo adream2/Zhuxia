@@ -15,10 +15,8 @@ function pageGeneral() {
   frag.append(h("h2", "", "启动"));
   const c2 = h("div", "card");
   c2.append(row("开机自启", "登录后用计划任务以最高权限启动", sw(v.autoStart, (x) => inv("set_autostart", { on: x }).then((s) => { S = s; render(); }))));
-  c2.append(row("启动时检查更新", "读取发布页最新版本号；更新源留空则完全不联网",
+  c2.append(row("启动时检查更新", "从 GitHub Releases 读最新版本号；没有新版本时安静退出，不打扰",
     sw(v.updateCheck, (x) => patch({ updateCheckEnabled: x }))));
-  c2.append(row("更新源", "例如 https://api.github.com/repos/owner/repo",
-    textInput(v.updateSource, "留空 = 不检查", (x) => patch({ updateSource: x || null }))));
   frag.append(c2);
 
   return frag;

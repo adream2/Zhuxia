@@ -911,15 +911,14 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) ->
                 match pick {
                     0 => crate::cfg_set(|c| c.ignored_update_version = Some(tag.clone())),
                     2 => {
-                        let url = zx_core::cfg::cfg().update_source.unwrap_or_default();
-                        if !url.is_empty() {
-                            unsafe {
-                                let u = zx_core::win::wide(&format!("{url}/releases/latest"));
-                                windows::Win32::UI::Shell::ShellExecuteW(
-                                    HWND::default(), windows::core::w!("open"),
-                                    PCWSTR(u.as_ptr()), PCWSTR::null(), PCWSTR::null(),
-                                    windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL);
-                            }
+                        // 只在 GitHub 分发：直接开 Releases 页面，不需要用户配更新源
+                        let url = zx_core::cfg::UPDATE_PAGE;
+                        unsafe {
+                            let u = zx_core::win::wide(url);
+                            windows::Win32::UI::Shell::ShellExecuteW(
+                                HWND::default(), windows::core::w!("open"),
+                                PCWSTR(u.as_ptr()), PCWSTR::null(), PCWSTR::null(),
+                                windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL);
                         }
                     }
                     _ => {}

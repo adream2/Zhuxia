@@ -445,6 +445,45 @@ fn clipboard_has_image() -> bool {
     }
 }
 
+/// 把一段文本写进剪贴板（放大镜取色复制 `#RRGGBB` 用）。
+///
+/// 走 `SetClipboardData(CF_UNICODETEXT)`：别的程序粘出来就是纯文本，
+/// 不依赖任何自定义格式。返回是否写成功。
+pub fn copy_text(text: &str) -> bool {
+    use windows::Win32::System::DataExchange::{
+        CloseClipboard, EmptyClipboard, OpenClipboard, SetClipboardData,
+    };
+    use windows::Win32::System::Memory::{GlobalAlloc, GlobalLock, GlobalUnlock, GMEM_MOVEABLE};
+
+    let mut bytes = Vec::new();
+    for u in text.encode_utf16().chain(std::iter::once(0)) {
+        bytes.extend_from_slice(&u.to_le_bytes());
+    }
+    unsafe {
+        if OpenClipboard(None).is_err() {
+            return false;
+        }
+        let _ = EmptyClipboard();
+        let mut ok = false;
+        if let Ok(hmem) = GlobalAlloc(GMEM_MOVEABLE, bytes.len().max(2)) {
+            let p = GlobalLock(hmem) as *mut u8;
+            if p.is_null() {
+                let _ = windows::Win32::Foundation::GlobalFree(hmem);
+            } else {
+                std::ptr::copy_nonoverlapping(bytes.as_ptr(), p, bytes.len());
+                let _ = GlobalUnlock(hmem);
+                ok = SetClipboardData(13, windows::Win32::Foundation::HANDLE(hmem.0)).is_ok();
+                // 成功时所有权已经交给系统，失败才自己释放
+                if !ok {
+                    let _ = windows::Win32::Foundation::GlobalFree(hmem);
+                }
+            }
+        }
+        let _ = CloseClipboard();
+        ok
+    }
+}
+
 fn restore_text(text: Option<String>) {
     use windows::Win32::System::DataExchange::{
         CloseClipboard, EmptyClipboard, OpenClipboard, SetClipboardData,

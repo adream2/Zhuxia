@@ -1,7 +1,9 @@
 //! 资源管理器右键菜单：HKCU 级联子菜单，三个输出形态各一项。
 //!
 //! 与 imgconv 同一套方案（`ExtendedSubCommandsKey`）：只写 HKCU、不需要管理员、
-//! 卸载 = 删键。`.app` 是目录，Windows 不会按扩展名给它挂文件菜单，只能命令行用。
+//! 卸载 = 删键。**父键的默认值必须不设**（微软文档明确要求）——设了外壳会认为
+//! 这个动词没有 command，整项被丢掉，表现就是"显示已注册、右键里没有"。
+//! `.app` 是目录，Windows 不会按扩展名给它挂文件菜单，只能命令行用。
 
 use std::ffi::c_void;
 
@@ -46,7 +48,8 @@ pub fn install() -> Result<usize, String> {
     let mut n = 0;
     for ext in EXTS {
         let sub = format!("Software\\Classes\\.{ext}\\shell\\{VERB}");
-        set_sz(&sub, None, VERB_LABEL)?;
+        // 整棵重建：老版本把菜单文案写进了父键默认值，那条记录会让外壳丢掉整个动词
+        delete_tree(&sub)?;
         set_sz(&sub, Some("MUIVerb"), VERB_LABEL)?;
         set_sz(&sub, Some("Icon"), &format!("{exe},0"))?;
         set_sz(&sub, Some("SubCommands"), "")?;
@@ -76,8 +79,23 @@ pub fn remove() -> Result<(), String> {
     }
 }
 
+/// 菜单是否真的能用：父键在、默认值为空、指向正确子菜单、子菜单里有 command。
 pub fn installed() -> bool {
-    key_exists(&format!("Software\\Classes\\.exe\\shell\\{VERB}"))
+    let parent = format!("Software\\Classes\\.exe\\shell\\{VERB}");
+    if !key_exists(&parent) {
+        return false;
+    }
+    if get_sz(&parent, None).map(|v| !v.trim().is_empty()).unwrap_or(false) {
+        return false;
+    }
+    if get_sz(&parent, Some("ExtendedSubCommandsKey")).as_deref() != Some("ZhuxiaAppIcon.Targets") {
+        return false;
+    }
+    [Mode::Png, Mode::Ico, Mode::All].iter().enumerate().any(|(i, m)| {
+        get_sz(&format!("{TARGETS_KEY}\\shell\\{:02}_{}\\command", i + 1, m.id()), None)
+            .map(|v| !v.trim().is_empty())
+            .unwrap_or(false)
+    })
 }
 
 pub fn registered_exe() -> Option<String> {
@@ -133,6 +151,43 @@ fn wide(s: &str) -> Vec<u16> {
 }
 fn hkcu() -> HKEY {
     HKEY_CURRENT_USER
+}
+
+/// 读一个 REG_SZ（`name == None` 读默认值）。
+fn get_sz(sub: &str, name: Option<&str>) -> Option<String> {
+    let subw = wide(sub);
+    let namew = wide(name.unwrap_or(""));
+    let name_ptr = if name.is_some() { PCWSTR(namew.as_ptr()) } else { PCWSTR::null() };
+    unsafe {
+        let mut cb = 0u32;
+        let rc = RegGetValueW(
+            hkcu(),
+            PCWSTR(subw.as_ptr()),
+            name_ptr,
+            RRF_RT_REG_SZ,
+            None,
+            None,
+            Some(&mut cb),
+        );
+        if rc != ERROR_SUCCESS || cb < 2 || cb > 32 * 1024 {
+            return None;
+        }
+        let mut buf = vec![0u16; (cb as usize).div_ceil(2)];
+        let rc = RegGetValueW(
+            hkcu(),
+            PCWSTR(subw.as_ptr()),
+            name_ptr,
+            RRF_RT_REG_SZ,
+            None,
+            Some(buf.as_mut_ptr() as *mut c_void),
+            Some(&mut cb),
+        );
+        if rc != ERROR_SUCCESS {
+            return None;
+        }
+        let len = buf.iter().position(|&c| c == 0).unwrap_or(buf.len());
+        Some(String::from_utf16_lossy(&buf[..len]))
+    }
 }
 
 fn set_sz(sub: &str, name: Option<&str>, value: &str) -> Result<(), String> {

@@ -251,8 +251,14 @@ fn main() {
     let cfg = zx_core::cfg::cfg();
     if fresh || cfg.startup_guide_completed != Some(true) {
         let pick = taskmon::dialogs::guide();
+        // 第二步：要不要接管 Win+V。这属于改系统的默认行为，交给用户决定，
+        // 不塞进默认值里（默认不接管，随时能在设置里改）。
+        let takeover = taskmon::dialogs::guide_win_v();
         zx_core::cfg::update_cfg(|c| {
             c.floating_mode = Some(pick == 1);
+            c.clipboard
+                .get_or_insert_with(Default::default)
+                .takeover_win_v = Some(takeover);
             c.startup_guide_completed = Some(true);
         });
     }

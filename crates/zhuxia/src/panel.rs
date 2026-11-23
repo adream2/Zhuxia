@@ -142,7 +142,9 @@ pub fn run() {
             record_patch, record_devices, record_open_dir, record_audio_devices,
             gesture_patch,
             imgconv_patch, imgconv_menu,
+            imgconv_pick, imgconv_run,
             appicon_patch, appicon_menu,
+            appicon_pick, appicon_run, open_folder,
             imgbed_state, imgbed_patch, imgbed_provider_patch,
             imgbed_secret_set, imgbed_secret_clear, imgbed_test, imgbed_upload_test,
             ib_pick_files, ib_preview, ib_upload_paths, ib_upload_b64, ib_clipboard,
@@ -362,7 +364,8 @@ fn state_json() -> Value {
             "interval": cfg.sample_interval_ms(),
             "autoStart": taskmon::autostart::is_enabled(),
             "updateCheck": cfg.update_check(),
-            "updateSource": cfg.update_source.clone().unwrap_or_default(),
+            // 更新源不可配：只在 GitHub 分发，检查地址写死在 zx_core::cfg::UPDATE_API
+            "updateRepo": zx_core::cfg::UPDATE_REPO,
             "theme": theme,
             "compact": cfg.compact(),
             "separators": cfg.separators(),
@@ -451,6 +454,60 @@ fn imgconv_menu(on: bool) -> Value {
     imgconv_view()
 }
 
+/// 操作页：挑图片（可多选）。
+#[tauri::command]
+fn imgconv_pick() -> Value {
+    let paths = pick_files(
+        "图片\0*.png;*.jpg;*.jpeg;*.jpe;*.jfif;*.gif;*.bmp;*.dib;*.tif;*.tiff;*.ico;*.webp;*.svg;*.svgz;*.avif;*.heic;*.heif\0所有文件\0*.*\0\0",
+        "选择要转换的图片",
+        true,
+    );
+    json!({ "paths": paths })
+}
+
+/// 操作页：按目标格式批量转换，返回逐条结果。
+///
+/// 走的是和右键菜单同一个 `convert_batch`，所以质量/覆盖/输出目录这些设置
+/// 两边完全一致——设置页里改什么，这里就按什么转。
+#[tauri::command]
+async fn imgconv_run(paths: Vec<String>, target: String) -> Value {
+    let Some(fmt) = imgconv::Target::parse(&target) else {
+        return json!({ "items": [], "error": format!("不认识的目标格式：{target}") });
+    };
+    let files: Vec<std::path::PathBuf> = paths.into_iter().map(std::path::PathBuf::from).collect();
+    let results = tauri::async_runtime::spawn_blocking(move || imgconv::convert_batch(&files, fmt))
+        .await
+        .unwrap_or_default();
+    let mut ok = 0usize;
+    let items: Vec<Value> = results
+        .into_iter()
+        .map(|(src, res)| match res {
+            Ok(o) => {
+                ok += 1;
+                json!({
+                    "ok": true,
+                    "source": src.to_string_lossy(),
+                    "output": o.output.to_string_lossy(),
+                    "name": o.output.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default(),
+                    "srcBytes": o.src_bytes,
+                    "outBytes": o.out_bytes,
+                    "width": o.w,
+                    "height": o.h,
+                    "ms": o.ms,
+                    "notice": o.notice,
+                })
+            }
+            Err(e) => json!({
+                "ok": false,
+                "source": src.to_string_lossy(),
+                "error": e.reason(),
+                "detail": e.detail().unwrap_or(""),
+            }),
+        })
+        .collect();
+    json!({ "items": items, "ok": ok })
+}
+
 // ---------------- 图标提取 ----------------
 
 fn appicon_view() -> Value {
@@ -499,6 +556,71 @@ fn appicon_menu(on: bool) -> Value {
         let _ = appicon::remove_menu();
     }
     appicon_view()
+}
+
+/// 操作页：挑程序 / 安装包 / 图标文件（可多选）。
+#[tauri::command]
+fn appicon_pick() -> Value {
+    let paths = pick_files(
+        "程序与安装包\0*.exe;*.dll;*.ocx;*.cpl;*.scr;*.sys;*.mui;*.lnk;*.msi;*.msix;*.appx;*.apk;*.aab;*.ipa;*.app;*.dmg;*.icns;*.deb;*.rpm;*.AppImage;*.ico\0所有文件\0*.*\0\0",
+        "选择要提取图标的文件",
+        true,
+    );
+    json!({ "paths": paths })
+}
+
+/// 操作页：按形态批量提取图标，返回逐条结果。
+#[tauri::command]
+async fn appicon_run(paths: Vec<String>, mode: String) -> Value {
+    let Some(m) = appicon::Mode::parse(&mode) else {
+        return json!({ "items": [], "error": format!("不认识的输出形态：{mode}") });
+    };
+    let files: Vec<std::path::PathBuf> = paths.into_iter().map(std::path::PathBuf::from).collect();
+    let results = tauri::async_runtime::spawn_blocking(move || appicon::extract_batch(&files, m))
+        .await
+        .unwrap_or_default();
+    let mut ok = 0usize;
+    let items: Vec<Value> = results
+        .into_iter()
+        .map(|(src, res)| match res {
+            Ok(o) => {
+                ok += 1;
+                json!({
+                    "ok": true,
+                    "source": src.to_string_lossy(),
+                    "outputs": o.outputs.iter().map(|p| p.to_string_lossy().to_string()).collect::<Vec<_>>(),
+                    "name": o.outputs.first().and_then(|p| p.file_name()).map(|n| n.to_string_lossy().to_string()).unwrap_or_default(),
+                    "detail": o.detail,
+                    "frames": o.frames,
+                    "largest": [o.largest.0, o.largest.1],
+                    "srcBytes": o.src_bytes,
+                    "ms": o.ms,
+                    "notice": o.notice,
+                })
+            }
+            Err(e) => json!({
+                "ok": false,
+                "source": src.to_string_lossy(),
+                "error": e.reason(),
+                "detail": e.detail().unwrap_or(""),
+            }),
+        })
+        .collect();
+    json!({ "items": items, "ok": ok })
+}
+
+/// 在资源管理器里打开一个目录（结果列表的「打开输出目录」）。
+///
+/// 只接受存在的目录，别的一律拒绝：这个口子只用来"看结果"，不做通用外壳。
+#[tauri::command]
+fn open_folder(path: String) -> Value {
+    let p = std::path::PathBuf::from(path.trim());
+    if p.is_dir() {
+        zx_core::win::shell_open(&p.to_string_lossy());
+        json!({ "ok": true })
+    } else {
+        json!({ "ok": false, "error": "目录不存在" })
+    }
 }
 
 // ---------------- 图床（多平台 / 三页窗口） ----------------
@@ -634,11 +756,22 @@ async fn imgbed_upload_test() -> Value {
 /// 原生多选对话框。返回完整路径。
 #[tauri::command]
 fn ib_pick_files() -> Value {
+    let paths = pick_files(
+        "图片\0*.png;*.jpg;*.jpeg;*.gif;*.webp;*.bmp;*.tif;*.tiff;*.svg;*.avif\0所有文件\0*.*\0\0",
+        "选择要上传的图片",
+        true,
+    );
+    json!({ "paths": paths })
+}
+
+/// 原生文件对话框（`filter` 用 NUL 分隔的「说明\0模式\0…\0\0」格式）。
+///
+/// 图床、图片转换、图标提取三个页面共用这一段：它们只是筛选器和标题不同，
+/// 多文件解析（文件名 + 后续文件名列表）的细节没必要抄三遍。
+fn pick_files(filter: &str, title: &str, multiselect: bool) -> Vec<String> {
     use windows::Win32::UI::Controls::Dialogs::*;
-    let filter: Vec<u16> = "图片\0*.png;*.jpg;*.jpeg;*.gif;*.webp;*.bmp;*.tif;*.tiff;*.svg;*.avif\0所有文件\0*.*\0\0"
-        .encode_utf16()
-        .collect();
-    let title: Vec<u16> = "选择要上传的图片\0".encode_utf16().collect();
+    let filter: Vec<u16> = filter.encode_utf16().collect();
+    let title: Vec<u16> = title.encode_utf16().chain(std::iter::once(0)).collect();
     let mut buf = vec![0u16; 64 * 1024];
     let mut ofn = OPENFILENAMEW {
         lStructSize: std::mem::size_of::<OPENFILENAMEW>() as u32,
@@ -646,12 +779,16 @@ fn ib_pick_files() -> Value {
         lpstrFile: windows::core::PWSTR(buf.as_mut_ptr()),
         nMaxFile: buf.len() as u32,
         lpstrTitle: windows::core::PCWSTR(title.as_ptr()),
-        Flags: OFN_EXPLORER | OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_ALLOWMULTISELECT | OFN_NOCHANGEDIR,
+        Flags: OFN_EXPLORER
+            | OFN_FILEMUSTEXIST
+            | OFN_PATHMUSTEXIST
+            | OFN_NOCHANGEDIR
+            | if multiselect { OFN_ALLOWMULTISELECT } else { OPEN_FILENAME_FLAGS(0) },
         ..Default::default()
     };
     let ok = unsafe { GetOpenFileNameW(&mut ofn) };
     if !ok.as_bool() {
-        return json!({ "paths": [] });
+        return Vec::new();
     }
     let end = buf.iter().position(|&c| c == 0).unwrap_or(0);
     let first = String::from_utf16_lossy(&buf[..end]);
@@ -668,12 +805,11 @@ fn ib_pick_files() -> Value {
         rest.push(String::from_utf16_lossy(&buf[i..stop]));
         i = stop + 1;
     }
-    let paths = if rest.is_empty() {
+    if rest.is_empty() {
         vec![first]
     } else {
         rest.iter().map(|f| format!("{first}\\{f}")).collect()
-    };
-    json!({ "paths": paths })
+    }
 }
 
 /// 读文件生成 160px 预览（WebP data URL）。大图不整张塞进 IPC。
@@ -1315,6 +1451,8 @@ fn rule_view(r: &gesture::model::Rule) -> Value {
             let name = match op.as_str() {
                 "capture" => "截图",
                 "clipboard" => "剪贴板面板",
+                "imgbed" => "图床",
+                "devtools" => "开发工具",
                 "settings" => "打开设置",
                 "toggle-exclude" => "排除当前程序",
                 "close-similar" => "关闭相似窗口",

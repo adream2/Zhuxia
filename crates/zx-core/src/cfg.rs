@@ -8,6 +8,14 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 
+/// 发布与更新的**唯一**来源。只在 GitHub 分发，所以更新检查写死在这里，
+/// 不给用户填更新源——填错一个字就永远收不到更新，还多一个需要解释的输入框。
+pub const UPDATE_REPO: &str = "adream2/Zhuxia";
+/// 查最新版本号（`{}/releases/latest` 返回 JSON）。
+pub const UPDATE_API: &str = "https://api.github.com/repos/adream2/Zhuxia";
+/// 「立即更新」打开的页面。
+pub const UPDATE_PAGE: &str = "https://github.com/adream2/Zhuxia/releases/latest";
+
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum Theme {
@@ -439,7 +447,8 @@ pub struct EdgeCfg {
     pub action: Option<String>,
 }
 
-/// 四条边的滚轮行为。缺省全关——边缘吞滚轮是个很"独占"的行为，得用户自己开。
+/// 四条边的滚轮行为。缺省左/右开（音量 / 亮度）、上/下关：
+/// 左右是"顺手调一下"的高频动作，上下会抢走页面的滚轮，打扰大于收益。
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
 #[serde(rename_all = "camelCase", default)]
 pub struct EdgesCfg {
@@ -801,7 +810,16 @@ pub struct EdgeSettings {
 
 impl Default for EdgeSettings {
     fn default() -> Self {
-        EdgeSettings { left: None, right: None, top: None, bottom: None, margin: 2, repeat_ms: 45 }
+        // 左边音量、右边亮度：这两条边默认接管（不需要用户先去设置页开开关）。
+        // 上/下会抢页面滚轮，保持关闭。
+        EdgeSettings {
+            left: Some(EdgeAction::Volume),
+            right: Some(EdgeAction::Brightness),
+            top: None,
+            bottom: None,
+            margin: 2,
+            repeat_ms: 45,
+        }
     }
 }
 
@@ -852,12 +870,19 @@ pub struct GestureSettings {
 }
 
 /// `#RRGGBB` / `#AARRGGBB` / `RRGGBB` → 0xAARRGGBB；解析失败用默认值。
-/// 默认动作按"左边音量、右边亮度、上边标签、下边程序"落位——只开开关就能用。
+/// 默认动作按"左边音量、右边亮度、上边标签、下边程序"落位。
+///
+/// 左右两条边**缺省就开**（这是最常见的手感），上下两条边缺省关（会抢页面滚轮）。
+/// 显式写 `enabled: false` 仍然能关掉；缺省动作只在这条边没写 `action` 时兜底。
 fn parse_edges(c: Option<&EdgesCfg>) -> EdgeSettings {
     let Some(c) = c else { return EdgeSettings::default() };
-    let side = |cfg: Option<&EdgeCfg>, fallback: EdgeAction| -> Option<EdgeAction> {
-        let cfg = cfg?;
-        if cfg.enabled != Some(true) {
+    let side = |cfg: Option<&EdgeCfg>, fallback: EdgeAction, default_on: bool| -> Option<EdgeAction> {
+        let cfg = match cfg {
+            Some(cfg) => cfg,
+            None => return if default_on { Some(fallback) } else { None },
+        };
+        // 没写 enabled：按这条边的默认值（左/右开，上/下关）
+        if !cfg.enabled.unwrap_or(default_on) {
             return None;
         }
         match cfg.action.as_deref() {
@@ -874,10 +899,10 @@ fn parse_edges(c: Option<&EdgesCfg>) -> EdgeSettings {
         }
     };
     EdgeSettings {
-        left: side(c.left.as_ref(), EdgeAction::Volume),
-        right: side(c.right.as_ref(), EdgeAction::Brightness),
-        top: side(c.top.as_ref(), EdgeAction::Tab),
-        bottom: side(c.bottom.as_ref(), EdgeAction::App),
+        left: side(c.left.as_ref(), EdgeAction::Volume, true),
+        right: side(c.right.as_ref(), EdgeAction::Brightness, true),
+        top: side(c.top.as_ref(), EdgeAction::Tab, false),
+        bottom: side(c.bottom.as_ref(), EdgeAction::App, false),
         margin: c.margin.unwrap_or(2).clamp(0, 32),
         repeat_ms: c.repeat_ms.unwrap_or(45).clamp(10, 500),
     }
@@ -962,7 +987,6 @@ pub struct Settings {
     pub clash_api_secret: Option<String>,
 
     pub update_check_enabled: Option<bool>,
-    pub update_source: Option<String>,
     pub ignored_update_version: Option<String>,
 
     /// 剪贴板模块（第二模块）。整段可缺省，旧配置文件照样能读。
@@ -1022,7 +1046,8 @@ impl Settings {
         ClipboardSettings {
             enabled: c.enabled != Some(false),
             capture_files: c.capture_files != Some(false),
-            capture_rich_text: c.capture_rich_text == Some(true),
+            // 富文本默认开：Word / 网页复制过来本来就带格式，丢掉才是"改行为"
+            capture_rich_text: c.capture_rich_text != Some(false),
             record_images: c.record_images != Some(false),
             dedupe: c.dedupe != Some(false),
             persistent: c.persistent != Some(false),
@@ -1254,9 +1279,9 @@ impl Settings {
             enabled: g.enabled != Some(false),
             sensitivity: g.sensitivity.unwrap_or(100).clamp(0, 200),
             middle_button: g.middle_button == Some(true),
-            // 上游默认 false：全屏禁用是"可选项"，默认开着会让最大化窗口（任务栏自动隐藏时
-            // 其 GetWindowRect 正好等于整块屏）里的手势全部失灵。
-            disable_in_fullscreen: g.disable_in_fullscreen == Some(true),
+            // 默认开：进游戏/全屏播放器里手势本来就用不上，误触发只会更烦。
+            // 判定侧只认真·全屏（`IsZoomed` 的最大化窗口不算，见 zx-ui::window）。
+            disable_in_fullscreen: g.disable_in_fullscreen != Some(false),
             disable_on_desktop: g.disable_on_desktop == Some(true),
             paused: g.paused == Some(true),
             hint: g.hint != Some(false),
@@ -1579,7 +1604,7 @@ mod tests {
         assert!(g.enabled);
         assert_eq!(g.sensitivity, 100);
         assert!(!g.middle_button);
-        assert!(!g.disable_in_fullscreen); // 默认关：最大化窗口不算全屏
+        assert!(g.disable_in_fullscreen); // 默认开：全屏应用里不收手势
         assert!(!g.disable_on_desktop);
         assert!(!g.paused);
         assert!(g.hint);
@@ -1587,6 +1612,35 @@ mod tests {
         // rules = None 表示"没写过"，由 gesture 模块装内置默认规则
         assert!(g.rules.is_none());
         assert_eq!(g.target_window, "start-window");
+        // 左右两条边默认接管（音量 / 亮度），上下不接管
+        assert_eq!(g.edges.left, Some(EdgeAction::Volume));
+        assert_eq!(g.edges.right, Some(EdgeAction::Brightness));
+        assert_eq!(g.edges.top, None);
+        assert_eq!(g.edges.bottom, None);
+    }
+
+    #[test]
+    fn edges_default_on_but_can_be_turned_off() {
+        // 只写了一边的开关：另一边仍按默认开
+        let s: Settings = serde_yaml::from_str("gesture:\n  edges:\n    left:\n      enabled: false\n").unwrap();
+        let e = s.gesture().edges;
+        assert_eq!(e.left, None);
+        assert_eq!(e.right, Some(EdgeAction::Brightness));
+
+        // 显式开上边才接管
+        let s: Settings = serde_yaml::from_str("gesture:\n  edges:\n    top:\n      enabled: true\n").unwrap();
+        assert_eq!(s.gesture().edges.top, Some(EdgeAction::Tab));
+
+        // action: none 等价于不接管
+        let s: Settings = serde_yaml::from_str("gesture:\n  edges:\n    right:\n      action: none\n").unwrap();
+        assert_eq!(s.gesture().edges.right, None);
+    }
+
+    #[test]
+    fn clipboard_rich_text_is_on_by_default() {
+        assert!(Settings::default().clipboard().capture_rich_text);
+        let s: Settings = serde_yaml::from_str("clipboard:\n  captureRichText: false\n").unwrap();
+        assert!(!s.clipboard().capture_rich_text);
     }
 
     #[test]

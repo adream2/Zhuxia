@@ -111,6 +111,12 @@ h2:first-of-type { margin-top: 0; }
 .row .ctl { flex: none; display: flex; align-items: center; gap: 8px; }
 .row.disabled { opacity: .45; pointer-events: none; }
 
+/* 快捷键说明行：键名一列固定宽度、说明占满剩余空间并换行。
+   不加这两条，短标签会被长说明挤成一列一个字。 */
+.row.helpitem { align-items: flex-start; }
+.row.helpitem .label { flex: 0 0 168px; }
+.row.helpitem .hint { flex: 1; min-width: 0; margin-top: 0; line-height: 1.55; }
+
 /* 开关 */
 .switch {
   width: 40px; height: 22px; border-radius: 11px; background: var(--line);
@@ -257,6 +263,24 @@ input[type="number"]:focus { border-color: var(--accent); }
 }
 .chip.on { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
 .row .ctl textarea { text-align: left; }
+
+/* ---------- 图片转换 / 图标提取的操作页 ---------- */
+/* 选中文件用标签墙显示：默认的 .chips 是右对齐、限宽给"定量选项"用的，
+   文件列表要占满一行、左对齐。 */
+.chips.files { max-width: none; justify-content: flex-start; margin-top: 6px; }
+.chips.files .chip {
+  max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.conv-results { margin-top: 4px; display: flex; flex-direction: column; gap: 2px; }
+.conv-item {
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline;
+  padding: 5px 0; border-top: 1px solid var(--line); font-size: 12px;
+}
+.conv-item:first-child { border-top: 0; }
+.conv-item.bad .conv-detail { color: #d94a4a; }
+.conv-name { font-weight: 600; min-width: 120px; max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.conv-detail { color: var(--text-2); }
+.conv-note { color: var(--text-2); font-size: 11px; opacity: .9; }
 
 /* ---------- 手势设置页 ---------- */
 .grules .grule {

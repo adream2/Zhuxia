@@ -193,6 +193,8 @@ struct Ov {
     /// 都从 settings.yaml 的内存副本里深度拷贝一遍 Settings。
     magnifier: bool,
     detect_window: bool,
+    /// 刚刚复制过的颜色值（放大镜信息条上闪一下，1 秒后自动消失）
+    color_flash: Option<String>,
     /// 本次会话的设计 token（读注册表取浅色/深色，每帧查太贵，开会话时定一次）
     tk: Tokens,
 }
@@ -348,6 +350,7 @@ fn spawn_overlay(frame: Option<Frame>, doc: Option<Canvas>, hidden: Vec<HWND>,
         hidden_pins: hidden,
         magnifier: c.magnifier,
         detect_window: c.detect_window,
+        color_flash: None,
         tk: design::tokens(),
     });
     let mut pt = POINT::default();
@@ -814,17 +817,21 @@ impl Ov {
 
     fn paint_hint(&mut self, s: f32) {
         let tk = self.tk;
+        // 放大镜开着时右键被征用成"取色"，提示里要说清楚，别让用户以为右键还能取消
+        let pick = if self.magnifier { " · 右键取色" } else { "" };
         let text = match self.mode {
             Mode::Append => format!(
                 "拼接（{}）：已 {} 张 · 继续框选 · 滚轮换方向 · Enter 完成 · Esc 取消",
                 stitch::dir().name(),
                 stitch::count()
             ),
-            _ if self.stage == Stage::Selected => {
-                "拖动调整 · 方向键微调 · Enter 标注 · Ctrl+L 长截图 · Esc 返回".to_string()
+            _ if self.stage == Stage::Selected => format!(
+                "拖动调整 · 方向键微调 · Enter 标注 · Ctrl+L 长截图{pick} · Esc 返回"
+            ),
+            _ if self.chain.is_empty() => {
+                format!("拖动框选区域 · 单击窗口{pick} · Esc 退出")
             }
-            _ if self.chain.is_empty() => "拖动框选区域 · 单击窗口 · Esc 退出".to_string(),
-            _ => "拖动框选 · 单击窗口 · 滚轮切换层级 · Esc 退出".to_string(),
+            _ => format!("拖动框选 · 单击窗口 · 滚轮切换层级{pick} · Esc 退出"),
         };
         let w = (self.canvas.measure(&text, 11.5 * s, false) + 24.0 * s)
             .min(self.vw as f32 - 12.0 * s);
@@ -900,14 +907,18 @@ impl Ov {
         );
 
         let px = frame.pixel(self.cursor.0, self.cursor.1);
-        let info = format!(
-            "{},{}  #{:02X}{:02X}{:02X}",
-            self.cursor.0,
-            self.cursor.1,
-            (px >> 16) & 0xFF,
-            (px >> 8) & 0xFF,
-            px & 0xFF
-        );
+        // 刚复制过就显示「#RRGGBB 已复制」，否则显示坐标 + 颜色值
+        let info = match &self.color_flash {
+            Some(hex) => format!("{hex} 已复制"),
+            None => format!(
+                "{},{}  #{:02X}{:02X}{:02X}",
+                self.cursor.0,
+                self.cursor.1,
+                (px >> 16) & 0xFF,
+                (px >> 8) & 0xFF,
+                px & 0xFF
+            ),
+        };
         design::bubble(
             &mut self.canvas,
             bx - 2.0 * s,
@@ -2191,8 +2202,30 @@ impl Ov {
             self.back_out();
         } else if self.mode == Mode::Append {
             self.cancel_stitch();
+        } else if self.magnifier && self.frame.is_some()
+            && matches!(self.stage, Stage::Choosing | Stage::Selected | Stage::Dragging)
+        {
+            // 放大镜开着的时候右键 = 取色：把光标下的颜色写进剪贴板。
+            // 取消仍然有 Esc（`paint_hint` 里也这么写），不抢 Esc 的活。
+            self.copy_color();
         } else {
             self.close_soon();
+        }
+    }
+
+    /// 放大镜取色：`#RRGGBB` 写进剪贴板，信息条上闪一下确认。
+    fn copy_color(&mut self) {
+        let Some(frame) = &self.frame else { return };
+        let px = frame.pixel(self.cursor.0, self.cursor.1);
+        let hex = format!("#{:02X}{:02X}{:02X}", (px >> 16) & 0xFF, (px >> 8) & 0xFF, px & 0xFF);
+        if crate::copy_text(&hex) {
+            self.color_flash = Some(hex);
+            unsafe {
+                // 1.2 秒后把「已复制」擦掉（WM_TIMER 4）
+                let _ = KillTimer(self.hwnd, 4);
+                SetTimer(self.hwnd, 4, 1200, None);
+            }
+            self.paint();
         }
     }
 
@@ -2524,6 +2557,17 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) ->
                     let _ = KillTimer(hwnd, 3);
                 }
                 with_ov(|o| o.selftest_hover());
+                return LRESULT(0);
+            }
+            // 4 = 取色成功提示的自动消失
+            if w.0 == 4 {
+                unsafe {
+                    let _ = KillTimer(hwnd, 4);
+                }
+                with_ov(|o| {
+                    o.color_flash = None;
+                    o.paint();
+                });
                 return LRESULT(0);
             }
             unsafe {

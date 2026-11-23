@@ -2,6 +2,7 @@
 
 ## 功能
 
+- 设置页的「图标提取」有操作页：选文件 → 选形态 → 提取，结果逐条列出（帧数、尺寸、输出文件）。
 - 从程序与安装包提取图标：exe / dll / ocx / cpl / scr / sys / mui / lnk / msi / msix / appx / apk / aab / ipa / app / dmg / icns / deb / rpm / AppImage。
 - 输出 PNG、ICO（多尺寸）或全尺寸图集。
 - 资源管理器右键入口；模块禁用时卸载菜单。

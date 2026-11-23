@@ -4,8 +4,8 @@
 //! "现在是不是贴在边上"，是就把事件**吞掉**（否则页面会跟着滚），再丢给本模块的
 //! 工作线程去执行。钩子里只做一次坐标比较（纯原子读），不查窗口、不做动作。
 //!
-//! 四条边各自独立开关，默认全关：边缘吞滚轮是个很"独占"的行为，
-//! 用户不主动开就不该影响正常滚动。
+//! 四条边各自独立开关。**默认只开左、右**（音量 / 亮度）：这两条边是"顺手调一下"
+//! 的高频动作；上、下会抢走页面的滚轮，不主动开就不该影响正常滚动。
 
 use std::sync::atomic::{AtomicI32, AtomicU8, Ordering};
 use std::sync::mpsc::{channel, Sender};
@@ -262,9 +262,11 @@ mod tests {
         assert_eq!(hit(vx + vw / 2, vy + 1), Some(Side::Top));
         assert_eq!(hit(vx + vw / 2, vy + vh - 1), Some(Side::Bottom));
         assert_eq!(hit(vx + vw / 2, vy + vh / 2), None);
-        // 全关时任何位置都不接管（滚轮必须照常滚页面）
-        apply(&EdgeSettings::default());
+        // 明确全关时任何位置都不接管（滚轮必须照常滚页面）。
+        // 注意不能用 EdgeSettings::default()：默认是"左右开"，那是有意的默认手感。
+        apply(&EdgeSettings { left: None, right: None, top: None, bottom: None, margin: 2, repeat_ms: 45 });
         assert_eq!(hit(vx + 1, vy + vh / 2), None);
+        assert_eq!(hit(vx + vw - 1, vy + vh / 2), None);
     }
 
     #[test]

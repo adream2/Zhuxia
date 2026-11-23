@@ -166,15 +166,17 @@ function pageCapture() {
 
   frag.append(h("h2", "", "操作"));
   const help = h("div", "card");
+  // 键名一列定宽、说明一列自适应：以前两个 div 直接平铺在 flex 行里，
+  // 短标签（比如「美化」）会被长说明挤成一列一个字，看着像竖排。
   const item = (k, text) => {
-    const r = h("div", "row");
+    const r = h("div", "row helpitem");
     r.append(h("div", "label", k));
-    const d = h("div", "hint", text);
-    r.append(d);
+    r.append(h("div", "hint", text));
     return r;
   };
   help.append(item("拖动 / 单击", "拖动框选任意区域；单击直接截鼠标下的窗口"));
   help.append(item("松手之后", "拖内部移动、拖边角缩放、方向键微调（Shift 一次 10 像素）"));
+  help.append(item("放大镜", "选区时跟随鼠标显示像素与颜色；右键直接把当前颜色值（#RRGGBB）复制到剪贴板"));
   help.append(item("Enter / 双击", "进入标注；在标注里再按一次 = 复制并退出"));
   help.append(item("Esc", "标注态：回到可调整选区（长截图/拼接成品没有对应屏幕区域，直接取消）；选区态：先清选区，再按一次退出"));
   help.append(item("滚轮", "选区时切换控件→窗口→屏幕；标注态把鼠标放到图形/箭头上直接改它的粗细，空白处改下一条的默认粗细"));

@@ -33,8 +33,9 @@ const ACTION_KINDS = [
 const WINDOW_OPS = [["toggle-maximize", "最大化/还原"], ["minimize", "最小化"], ["close", "关闭"], ["toggle-topmost", "切换置顶"]];
 const VOLUME_OPS = [["increase", "音量 +"], ["decrease", "音量 −"], ["mute", "静音"]];
 const INTERNAL_OPS = [
-  ["capture", "截图"], ["clipboard", "剪贴板面板"], ["settings", "打开设置"],
-  ["toggle-exclude", "排除当前程序"], ["close-similar", "关闭相似窗口"], ["edit-hosts", "编辑 hosts"],
+  ["capture", "截图"], ["clipboard", "剪贴板面板"], ["imgbed", "图床"], ["devtools", "开发工具"],
+  ["settings", "打开设置"], ["toggle-exclude", "排除当前程序"], ["close-similar", "关闭相似窗口"],
+  ["edit-hosts", "编辑 hosts"],
 ];
 
 /// 动作参数控件：返回 { el, read, key }，由调用方在 onchange 时把值写回规则。
@@ -330,12 +331,12 @@ function pageGesture() {
   frag.append(c3);
 
   frag.append(h("h2", "", "边缘滚动"));
-  frag.append(h("p", "sub", "鼠标贴在屏幕边上滚滚轮：左边调音量、右边调亮度、上边切标签、下边切程序。四条边各自独立开关，关着的边滚轮照常滚页面。"));
+  frag.append(h("p", "sub", "鼠标贴在屏幕边上滚滚轮：左边调音量、右边调亮度（这两条边默认就开）；上边切标签、下边切程序。四条边各自独立开关，关着的边滚轮照常滚页面。"));
   const ce = h("div", "card");
   const ed = g.edges || {};
   const EDGE_OPTS = [["volume", "音量"], ["brightness", "亮度"], ["tab", "标签切换"], ["app", "程序切换"], ["none", "不接管"]];
-  const edgeRow = (key, label, hint, fallback) => {
-    const cur = Object.assign({ enabled: false, action: fallback }, ed[key] || {});
+  const edgeRow = (key, label, hint, fallback, defaultOn) => {
+    const cur = Object.assign({ enabled: !!defaultOn, action: fallback }, ed[key] || {});
     const ctl = h("div", "ctl");
     ctl.append(seg(EDGE_OPTS, cur.action || fallback,
       (v) => gpatch({ edges: Object.assign({}, ed, { [key]: Object.assign({}, cur, { action: v }) }) })));
@@ -343,10 +344,10 @@ function pageGesture() {
       (x) => gpatch({ edges: Object.assign({}, ed, { [key]: Object.assign({}, cur, { enabled: x }) }) })));
     return row(label, hint, ctl, !g.enabled);
   };
-  ce.append(edgeRow("left", "左边", "音量 ±（走系统音量键，OSD 由系统画）", "volume"));
-  ce.append(edgeRow("right", "右边", "亮度 ±5%（DDC/CI；笔记本内屏一般不支持，见日志）", "brightness"));
-  ce.append(edgeRow("top", "上边", "切标签：Ctrl+Tab / Ctrl+Shift+Tab", "tab"));
-  ce.append(edgeRow("bottom", "下边", "切程序：Alt+Tab / Alt+Shift+Tab", "app"));
+  ce.append(edgeRow("left", "左边", "音量 ±（走系统音量键，OSD 由系统画）", "volume", true));
+  ce.append(edgeRow("right", "右边", "亮度 ±5%（DDC/CI；笔记本内屏一般不支持，见日志）", "brightness", true));
+  ce.append(edgeRow("top", "上边", "切标签：Ctrl+Tab / Ctrl+Shift+Tab", "tab", false));
+  ce.append(edgeRow("bottom", "下边", "切程序：Alt+Tab / Alt+Shift+Tab", "app", false));
   frag.append(ce);
 
   frag.append(h("h2", "", "按键回显"));

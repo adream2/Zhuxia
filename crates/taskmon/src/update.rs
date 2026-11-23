@@ -1,7 +1,8 @@
-//! 启动时检查更新：读发布页的 `releases/latest`，与编译版本比较。
+//! 启动时检查更新：读 GitHub Releases 的 `releases/latest`，与编译版本比较。
 //!
-//! 上游把发布源写死成自己的仓库；这里做成可配置（settings.yaml 的 `updateSource`，
-//! 形如 `https://api.github.com/repos/owner/repo`），留空则完全不联网。
+//! 发布只有一个来源（GitHub），来源地址写死在 `zx_core::cfg::UPDATE_API`：
+//! 用户没有"更新源"这一项可填，也就没有填错就永远收不到更新的坑。
+//! `updateCheckEnabled: false` 仍然可以整体关掉检查。
 
 use std::sync::Mutex;
 
@@ -11,9 +12,8 @@ static PENDING: Mutex<Option<String>> = Mutex::new(None);
 pub fn check_async(notify_hwnd: isize) {
     let cfg = zx_core::cfg::cfg();
     if !cfg.update_check() { return; }
-    let Some(base) = cfg.update_source.clone().filter(|s| !s.trim().is_empty()) else { return };
     std::thread::Builder::new().name("zx-update".into()).spawn(move || {
-        let url = format!("{}/releases/latest", base.trim_end_matches('/'));
+        let url = format!("{}/releases/latest", zx_core::cfg::UPDATE_API.trim_end_matches('/'));
         let Some(body) = crate::http::get_text(&url, 5000) else { return };
         let Ok(v) = serde_json::from_str::<serde_json::Value>(&body) else { return };
         let Some(tag) = v.get("tag_name").and_then(|t| t.as_str()) else { return };
