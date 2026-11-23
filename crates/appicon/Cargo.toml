@@ -1,0 +1,60 @@
+[package]
+name = "appicon"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+zx-core.workspace = true
+zx-ui.workspace = true
+
+# PNG 读写：图标帧绝大多数是 PNG，自己控制压缩级别比 GDI+ 省体积。
+png = "0.18"
+# WebP 解码：Android 自适应图标与新版 APK 常用 .webp。
+libwebp-sys = "0.9"
+# APK / AAB / IPA / APPX 都是 zip。
+zip = { version = "9", default-features = false, features = ["deflate-flate2"] }
+# MSI 是 OLE 复合文档。
+cfb = "0.14"
+# Info.plist 有二进制和 XML 两种。
+plist = "1.10"
+# AppxManifest / 文本 AndroidManifest / .desktop。
+quick-xml = "0.42"
+# deb 的 data.tar / rpm 的 cpio / AppImage 的 squashfs。
+tar = "0.4"
+flate2 = "1"
+lzma-rs = "0.3"
+liblzma = "0.4"
+ruzstd = "0.9"
+bzip2 = "0.6"
+backhand = { version = "0.25", default-features = false, features = ["gzip", "zstd", "xz", "lz4"] }
+# DMG（UDIF 容器 + HFS+ 只读）。
+udif = "0.4"
+hfsplus = "0.4"
+# Linux 包里的图标很多只有 SVG，必须光栅化。
+resvg = "0.50"
+
+[dependencies.windows]
+version = "0.58"
+features = [
+  "Win32_Foundation",
+  "Win32_Graphics_Gdi",
+  "Win32_Graphics_GdiPlus",
+  "Win32_System_Com",
+  "Win32_System_IO",
+  "Win32_Storage_FileSystem",
+  "Win32_System_Pipes",
+  "Win32_System_Registry",
+  "Win32_System_Threading",
+  "Win32_UI_Shell",
+  "Win32_UI_WindowsAndMessaging",
+]
+
+[dev-dependencies]
+# 造测试夹具：合成 zip / tar.gz，跑真实解析路径。
+zip = { version = "9", default-features = false, features = ["deflate-flate2"] }
+flate2 = "1"
+tar = "0.4"
+plist = "1.10"
+cfb = "0.14"
+backhand = { version = "0.25", default-features = false, features = ["gzip", "zstd", "xz", "lz4"] }

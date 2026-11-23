@@ -1,0 +1,16 @@
+Zhuxia（驻匣）
+Copyright (c) 2026 Zhuxia authors <https://github.com/adream2/Zhuxia>
+
+This product is licensed under the Apache License, Version 2.0.
+See the LICENSE file for the full license text.
+
+Third-party components and references are documented in THIRD_PARTY_NOTICES.md.
+Retained notices, as required by their respective licenses:
+
+  TaskMonitor            Apache-2.0   https://github.com/linesoft2/TaskMonitor
+  sniplite               MIT          https://github.com/MrTangLuyao/sniplite
+  Captura                MIT          https://github.com/MathewSachin/Captura
+  Filee                  MIT          https://github.com/KnifeLemon/Filee
+  ScreenToGif            MS-PL        https://github.com/NickeManarin/ScreenToGif
+
+Rust dependencies: see Cargo.lock and THIRD_PARTY_NOTICES.md.

@@ -1,0 +1,215 @@
+/* 开发者工具箱（设置里的一页）：顶部工具条 + 工具工作区。
+ * 页面骨架（titlebar / 左侧导航 / h1 / .sub）都在 style.css 与 app.js 里，
+ * 这里只补"工具箱内部"的东西。宽度自适应走容器查询不现实（WebView2 版本不一），
+ * 统一用媒体查询按窗口宽度断点，与 style.css 里导航折叠的断点对齐。 */
+
+.dthost { min-width: 0; }
+
+/* 工具条：一行放不下就换行，窄窗口下横向滚动更贴近原生 tab 的手感 */
+.dt-rail {
+  display: flex; flex-wrap: wrap; gap: 4px;
+  padding: 4px; margin: 0 0 16px;
+  background: var(--card-2); border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.dt-rail button {
+  border: 0; background: transparent; color: var(--text-2);
+  font: inherit; font-size: 13px; padding: 6px 14px; border-radius: 7px;
+  cursor: pointer; white-space: nowrap;
+}
+.dt-rail button:hover { color: var(--text); background: var(--card); }
+.dt-rail button.on {
+  color: var(--text); background: var(--card); font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .12);
+}
+
+/* 工具工作区 */
+.dt-body { display: flex; flex-direction: column; gap: 12px; }
+.dt-tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.dt-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start; }
+
+.dt-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.dt-field > .lb {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 11.5px; color: var(--text-2); letter-spacing: .2px;
+}
+/* 字段标题右侧的小动作（如"复制"） */
+.dt-field > .lb .dt-btn { margin-left: auto; }
+
+/* 输入/输出框：覆盖 style.css 里 textarea 的 320px 固定宽（那里是给剪贴板设置页用的） */
+.dt-ta {
+  width: 100%; max-width: none; min-height: 210px;
+  font-family: Consolas, "Cascadia Mono", "Microsoft YaHei UI", monospace;
+  font-size: 12.5px; line-height: 1.55;
+  resize: vertical; tab-size: 4;
+}
+.dt-ta.dt-out { background: var(--card-2); color: var(--text); }
+
+/* 输入框：在工具栏里占 280px，在 field 里撑满整行。
+ * 注意 flex-basis 在纵向 flex 容器里是高度——所以不能写成 input{flex:0 1 280px} 全局。 */
+.dt-input, .dt-num {
+  min-width: 0; max-width: none; width: 280px;
+  font-size: 12.5px;
+}
+.dt-tools > .dt-input { flex: 0 1 280px; }
+.dt-field > .dt-input { width: 100%; flex: none; }
+.dt-num { width: 82px; }
+.dt-tools > .dt-num { flex: none; }
+.dt-input.mono, .dt-hl.mono { font-family: Consolas, "Cascadia Mono", monospace; }
+.dt-picker {
+  width: 34px; height: 30px; padding: 2px; flex: none; cursor: pointer;
+  background: var(--card-2); border: 1px solid var(--line); border-radius: 7px;
+}
+.dt-file {
+  font: inherit; font-size: 12px; color: var(--text-2);
+  background: var(--card-2); border: 1px dashed var(--line);
+  border-radius: 8px; padding: 10px 12px; width: 100%; cursor: pointer;
+}
+.dt-file::file-selector-button {
+  font: inherit; font-size: 12px; margin-right: 10px; padding: 4px 12px;
+  border: 1px solid var(--line); border-radius: 6px;
+  background: var(--card); color: var(--text); cursor: pointer;
+}
+
+/* 按钮：比 .btn 小一号，工具条上不会挤成一坨 */
+.dt-btn {
+  font: inherit; font-size: 12.5px; flex: none;
+  padding: 5px 13px; border-radius: 7px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--card-2); color: var(--text);
+}
+.dt-btn:hover { border-color: var(--accent); color: var(--accent); }
+.dt-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.dt-btn.primary:hover { color: #fff; opacity: .92; }
+.dt-btn.mini { padding: 3px 9px; font-size: 11.5px; border-radius: 6px; }
+
+/* 状态条：成功绿 / 警告黄 / 错误红，一眼分得清 */
+.dt-note {
+  font-size: 12px; line-height: 1.5; padding: 7px 11px;
+  border-radius: 8px; border: 1px solid var(--line);
+  background: var(--card-2); color: var(--text-2);
+  word-break: break-word;
+}
+.dt-note:empty { display: none; }
+.dt-note.ok {
+  color: #0f7b0f; border-color: color-mix(in srgb, #0f7b0f 28%, var(--line));
+  background: color-mix(in srgb, #0f7b0f 7%, transparent);
+}
+.dt-note.warn {
+  color: #9d5d00; border-color: color-mix(in srgb, #9d5d00 28%, var(--line));
+  background: color-mix(in srgb, #9d5d00 8%, transparent);
+}
+.dt-note.err {
+  color: var(--danger); border-color: color-mix(in srgb, var(--danger) 32%, var(--line));
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
+}
+body[data-theme="dark"] .dt-note.ok { color: #6ccb6c; }
+body[data-theme="dark"] .dt-note.warn { color: #ffc46b; }
+
+/* 键值结果表 */
+.dt-kv {
+  background: var(--card); border: 1px solid var(--line);
+  border-radius: 10px; overflow: hidden;
+}
+.dt-kv .r {
+  display: flex; align-items: center; gap: 12px;
+  padding: 7px 12px; border-bottom: 1px solid var(--line);
+  min-height: 38px;
+}
+.dt-kv .r:last-child { border-bottom: 0; }
+.dt-kv .k { width: 96px; flex: none; font-size: 11.5px; color: var(--text-2); }
+.dt-kv .v {
+  flex: 1; min-width: 0; font-size: 12.5px;
+  font-family: Consolas, "Cascadia Mono", monospace;
+  word-break: break-all; user-select: text;
+}
+
+/* 正则：flags 按钮、匹配高亮、明细列表 */
+.dt-flags { display: flex; gap: 3px; flex: none; }
+.dt-flag {
+  width: 26px; height: 26px; border-radius: 6px; cursor: pointer;
+  font: inherit; font-size: 12px; font-family: Consolas, monospace;
+  border: 1px solid var(--line); background: var(--card-2); color: var(--text-2);
+}
+.dt-flag.on {
+  border-color: var(--accent); color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.dt-tag { color: var(--text-2); font-family: Consolas, monospace; font-size: 13px; flex: none; }
+
+.dt-hl {
+  margin: 0; padding: 10px 12px; min-height: 66px;
+  background: var(--card-2); border: 1px solid var(--line); border-radius: 8px;
+  font-family: Consolas, "Cascadia Mono", monospace; font-size: 12.5px;
+  line-height: 1.6; white-space: pre-wrap; word-break: break-word;
+  user-select: text; max-height: 260px; overflow: auto;
+}
+.dt-hl mark {
+  background: #ffe08a; color: #1b1b1b; border-radius: 2px;
+  padding: 0 1px; box-shadow: 0 0 0 1px #ffe08a;
+}
+body[data-theme="dark"] .dt-hl mark { background: #7a5d00; color: #fff; box-shadow: 0 0 0 1px #7a5d00; }
+
+.dt-list {
+  background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+  overflow: hidden; max-height: 240px; overflow-y: auto;
+}
+.dt-list .m {
+  display: flex; gap: 10px; padding: 6px 12px;
+  border-bottom: 1px solid var(--line);
+  font-size: 12px; line-height: 1.5;
+}
+.dt-list .m:last-child { border-bottom: 0; }
+.dt-list .m.empty { color: var(--text-2); justify-content: center; padding: 18px; }
+.dt-list .m .i { flex: none; width: 78px; color: var(--text-2); font-family: Consolas, monospace; }
+.dt-list .m .b { min-width: 0; word-break: break-all; user-select: text; }
+.dt-list .m code {
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-size: 12px;
+}
+.dt-list .m .g { color: var(--accent); margin-left: 8px; }
+
+/* 时间戳页顶部的实时行 */
+.dt-live {
+  font-size: 12px; color: var(--text-2);
+  font-family: Consolas, "Cascadia Mono", monospace;
+  padding: 6px 11px; border-radius: 8px;
+  background: var(--card-2); border: 1px dashed var(--line);
+}
+
+/* 颜色色块 */
+.dt-swatch {
+  height: 84px; border-radius: 10px;
+  border: 1px solid var(--line);
+  background-size: 16px 16px;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, .12);
+}
+
+/* 开关 + 文案的组合 */
+.dt-inline { display: inline-flex; align-items: center; gap: 7px; flex: none; }
+.dt-inline-t { font-size: 12px; color: var(--text-2); white-space: nowrap; }
+
+/* JWT */
+.dt-jwt { display: flex; flex-direction: column; gap: 12px; }
+.dt-jwt-sec { display: flex; flex-direction: column; gap: 6px; }
+.dt-jwt-h { font-size: 11px; letter-spacing: .8px; color: var(--text-2); }
+.dt-jwt-sec .dt-hl { max-height: 300px; }
+
+/* 窄窗口：输入/输出竖排。断点与 style.css 的导航折叠一致。 */
+@media (max-width: 900px) {
+  .dt-grid { grid-template-columns: 1fr; }
+  .dt-ta { min-height: 150px; }
+  .dt-input { flex: 1 1 auto; width: auto; }
+  .dt-kv .k { width: 84px; }
+}
+
+@media (max-width: 620px) {
+  /* 工具条继续换行，不做横向滚动：nowrap 的元素最小内容宽度会把整页撑出屏幕
+     （main 是纵向 flex 项，min-width:auto 会跟着涨）。多一行比横向溢出好。 */
+  .dt-rail { max-width: 100%; }
+  .dt-rail button { padding: 6px 11px; font-size: 12.5px; }
+  .dt-kv .r { gap: 8px; padding: 7px 10px; }
+  .dt-kv .v { font-size: 12px; }
+  .dt-tools { gap: 6px; }
+  .dt-list .m { flex-direction: column; gap: 2px; }
+  .dt-list .m .i { width: auto; }
+}

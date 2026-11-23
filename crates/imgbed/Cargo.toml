@@ -1,0 +1,37 @@
+[package]
+name = "imgbed"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+zx-core.workspace = true
+zx-ui.workspace = true
+zx-media = { path = "../zx-media" }
+serde.workspace = true
+serde_yaml.workspace = true
+serde_json.workspace = true
+# S3 SigV4 的哈希/HMAC：sha2 项目里已有（appicon 的 APK 校验），这里直接用。
+sha2 = "0.10"
+# S3 ListObjectsV2 与 WebDAV PROPFIND 都是 XML；手撕字符串会在命名空间上翻车。
+quick-xml = "0.42"
+
+# GitHub Contents API 要求 base64；自己写一遍要处理 padding/换行，不值得。
+# 0.21 已经在 tauri 的依赖树里，不会多拉一份。
+base64 = "0.21"
+# 剪贴板里的 DIB 要转成 PNG 再上传（CF_DIB 不是文件格式，GitHub 不认）。
+png = "0.18"
+
+[dependencies.windows]
+version = "0.58"
+features = [
+  "Win32_Foundation",
+  "Win32_Graphics_Gdi",
+  "Win32_Networking_WinHttp",
+  "Win32_Security_Cryptography",
+  "Win32_System_DataExchange",
+  "Win32_System_Memory",
+  "Win32_System_Threading",
+  "Win32_UI_Input_KeyboardAndMouse",
+  "Win32_UI_WindowsAndMessaging",
+]

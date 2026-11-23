@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>驻匣 · 设置</title>
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="imgbed.css">
+<link rel="stylesheet" href="devtools.css">
+</head>
+<body data-theme="light">
+  <header class="titlebar" data-tauri-drag-region>
+    <img id="logo" src="icon.png" alt="" data-tauri-drag-region>
+    <span class="brand" data-tauri-drag-region>驻匣 <em>Zhuxia</em></span>
+    <span class="spacer" data-tauri-drag-region></span>
+    <button class="tb" id="btn-min" title="最小化">–</button>
+    <button class="tb close" id="btn-close" title="关闭">✕</button>
+  </header>
+
+  <div class="shell">
+    <nav id="nav">
+      <div class="nav-group">系统监控</div>
+      <button data-page="appearance">外观设置</button>
+      <button data-page="sampling">采样项目</button>
+      <button data-page="traffic">流量管理</button>
+
+      <div class="nav-group">工具</div>
+      <button data-page="clipboard">剪贴管理</button>
+      <button data-page="capture">截图工具</button>
+      <button data-page="record">录屏工具</button>
+      <button data-page="gesture">鼠标手势</button>
+      <button data-page="imgconv">图片转换</button>
+      <button data-page="appicon">图标提取</button>
+      <button data-page="imgbed">图床管理</button>
+      <button data-page="devtools">开发工具</button>
+
+      <div class="nav-group">应用</div>
+      <button data-page="general">通用设置</button>
+      <button data-page="about">关于驻匣</button>
+      <div class="nav-foot" id="nav-foot"></div>
+    </nav>
+    <main id="page"></main>
+  </div>
+
+  <div id="toast" class="toast"></div>
+  <!-- 经典脚本共享一个全局作用域：先公共控件，再各模块页，最后是核心（PAGES 在最后求值） -->
+  <script src="kit.js"></script>
+  <script src="pages/general.js"></script>
+  <script src="pages/appearance.js"></script>
+  <script src="pages/sampling.js"></script>
+  <script src="pages/traffic.js"></script>
+  <script src="pages/clipboard.js"></script>
+  <script src="pages/capture.js"></script>
+  <script src="pages/record.js"></script>
+  <script src="pages/gesture.js"></script>
+  <script src="pages/imgconv.js"></script>
+  <script src="pages/appicon.js"></script>
+  <script src="pages/imgbed.js"></script>
+  <script src="pages/about.js"></script>
+  <script src="imgbed.js"></script>
+  <script src="devtools.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

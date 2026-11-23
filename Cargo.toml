@@ -1,0 +1,47 @@
+[workspace]
+resolver = "2"
+members = ["crates/zx-core", "crates/zx-ui", "crates/taskmon", "crates/clipboard", "crates/capture", "crates/gesture", "crates/imgconv", "crates/appicon", "crates/zx-media", "crates/imgbed", "crates/zhuxia"]
+
+[workspace.package]
+version = "0.0.1"
+edition = "2021"
+authors = ["Zhuxia"]
+license = "Apache-2.0"
+repository = "https://github.com/adream2/Zhuxia"
+
+[workspace.dependencies]
+zx-core = { path = "crates/zx-core" }
+zx-ui = { path = "crates/zx-ui" }
+serde = { version = "1", features = ["derive"] }
+serde_yaml = "0.9"
+serde_json = "1"
+libloading = "0.8"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+
+# 逐像素的热循环不能按体积优化：缩放一步 1280×720 在 opt-level=z 下要 19ms，
+# 换成 3 只要 6ms（都是实测）。其余 crate 继续保持 z，二进制只大几十 KB。
+[profile.release.package.capture]
+opt-level = 3
+
+# 同理：解码要逐像素做定向/压平/换字节序，PNG 还要走 deflate。
+# z 下 12MP 的 PNG 编码慢一个数量级，"右键点完就好"就没了。
+[profile.release.package.imgconv]
+opt-level = 3
+
+# 图标提取：PNG/WebP/SVG 解码与多档缩放都是逐像素循环，z 下慢一截。
+[profile.release.package.appicon]
+opt-level = 3
+
+# 图床：base64 + PNG 编码 + JSON 都是整块数据搬运，z 下会明显慢（截图上传等不起）。
+[profile.release.package.imgbed]
+opt-level = 3
+
+# 图像管线：缩放与 WebP 编码是逐像素循环，z 下慢一个数量级。
+[profile.release.package.zx-media]
+opt-level = 3

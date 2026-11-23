@@ -1,0 +1,42 @@
+[package]
+name = "imgconv"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+zx-core.workspace = true
+zx-ui.workspace = true
+
+# PNG 自己写：GDI+ 的 PNG 编码器不给压缩级别，而且 level 6 比 GDI+ 快一截。
+png = "0.18"
+# WebP：GDI+ 既不读也不写。直接用 libwebp 的 C API（比 webp 包装少拉一个 image crate）。
+libwebp-sys = "0.9"
+# SVG：系统没有可直接调用的光栅化器（GDI+ 只认图元文件），resvg 是纯 Rust 里质量最稳的一档。
+# 默认特性带 text + system-fonts + raster-images，SVG 里的文字和内嵌位图都能正常渲染。
+resvg = "0.50"
+
+[dev-dependencies]
+# 只给测试用：解回来核对像素，不进二进制。
+image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
+
+[dependencies.windows]
+version = "0.58"
+features = [
+  "Win32_Foundation",
+  "Win32_Graphics_Gdi",
+  "Win32_Graphics_GdiPlus",
+  "Win32_Security",
+  "Win32_Storage_FileSystem",
+  "Win32_System_Com",
+  "Win32_System_Com_StructuredStorage",
+  "Win32_System_IO",
+  "Win32_System_LibraryLoader",
+  "Win32_System_Memory",
+  "Win32_System_Pipes",
+  "Win32_System_Registry",
+  "Win32_System_Threading",
+  "Win32_UI_Input_KeyboardAndMouse",
+  "Win32_UI_Shell",
+  "Win32_UI_WindowsAndMessaging",
+]

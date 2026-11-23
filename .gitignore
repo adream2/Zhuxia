@@ -1,0 +1,34 @@
+# 构建产物
+/target/
+/crates/zhuxia/gen/
+
+# 本地参考源码（第三方项目快照，不随仓库分发）
+/_ref/
+
+# 开发/测试临时文件
+/_smoke/
+/_shot.png
+*.log
+*.tmp
+*.yaml.tmp
+/Taskfile.local*
+
+# 运行时数据（exe 同目录生成，不属于源码）
+/settings.yaml
+/logs/
+/clipboard/
+/imgbed/
+/webview2/
+/gesture-status.txt
+/capture-hotkey.txt
+/imgbed-hotkey.txt
+/panel-page.txt
+/netstat.json
+
+# 编辑器 / 系统
+/.workbuddy/
+/.vscode/
+/.idea/
+.DS_Store
+Thumbs.db
+desktop.ini

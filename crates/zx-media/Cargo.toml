@@ -1,0 +1,11 @@
+[package]
+name = "zx-media"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+# 解码只做三种最常见的位图：PNG / JPEG / WebP。GIF（动图）与 SVG 不转，直接原样上传。
+png = "0.18"
+zune-jpeg = "0.5"
+libwebp-sys = "0.9"
