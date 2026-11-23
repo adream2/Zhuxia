@@ -9,6 +9,9 @@ let OCR_LOADING = false;
 let OCR_TIMER = 0;
 let OCR_SRC = "auto";
 let OCR_CUSTOM = "";
+/// 下载状态。进度条只在"真的在下载（或刚失败）"时出现——以前这一行是常驻的，
+/// 一进页面就看到一根空进度条，像是已经下了一半，其实什么都没开始。
+let OCR_DL = { running: false, error: "" };
 
 async function loadOcrModel() {
   try { OCRP = await inv("ocr_model_state"); } catch (e) { OCRP = null; }
@@ -16,8 +19,13 @@ async function loadOcrModel() {
 
 function fmtMB(n) { return (n / 1048576).toFixed(1) + " MB"; }
 
-function startOcrPoll() {
+function stopOcrPoll() {
   if (OCR_TIMER) clearInterval(OCR_TIMER);
+  OCR_TIMER = 0;
+}
+
+function startOcrPoll() {
+  stopOcrPoll();
   // 下载线程刚启动时 RUNNING 还是 false（它是在工作线程里置位的）。
   // 所以"第一次看到 running=false"不能当作完成，否则轮询会在 400ms 就自己停掉。
   let seenRunning = false;
@@ -43,14 +51,16 @@ function startOcrPoll() {
       idleTicks += 1;
       // 10 秒还没见过 running：线程没起来，别再空转
       if (idleTicks > 25) {
-        if (label) label.textContent = "下载线程没有启动，请重试或看 logs/";
-        clearInterval(OCR_TIMER);
-        OCR_TIMER = 0;
+        stopOcrPoll();
+        OCR_DL.running = false;
+        OCR_DL.error = "下载线程没有启动，请重试或看 logs/";
+        if (page === "capture") render();
       }
       return;
     }
-    clearInterval(OCR_TIMER);
-    OCR_TIMER = 0;
+    stopOcrPoll();
+    OCR_DL.running = false;
+    OCR_DL.error = p.error || "";
     await loadOcrModel();
     if (page === "capture") render();
   }, 400);
@@ -101,41 +111,59 @@ function pageCapture() {
       : "未装模型：用 Windows 自带 OCR（免下载，但中文识别弱一些）",
     h("b", "", engine)));
   oc.append(row("模型文件", st ? (st.dir || "") : "ocr/", null,
-    false, st ? h("span", "hint", st.installed ? fmtMB(st.bytes) : "未安装") : null));
+    false, st ? h("span", "hint", st.installed ? fmtMB(st.bytes) : "未安装（约 15 MB）") : null));
 
-  // 下载源
+  // 下载源 + 下载按钮。
+  // 这里以前只创建了按钮对象却没 append 到任何一行，页面上根本没有"下载"可点；
+  // 而进度条是常驻的，所以看到的是一根不会动的空进度条。
+  const dl = h("button", "btn primary", st && st.installed ? "重新下载" : "下载模型");
+  dl.disabled = OCR_DL.running;
+  dl.onclick = async () => {
+    OCR_DL.running = true;
+    OCR_DL.error = "";
+    render(); // 先把「下载进度」这一行画出来，别让人以为点了没反应
+    try {
+      await inv("ocr_model_download", { source: OCR_SRC, custom: OCR_CUSTOM });
+    } catch (e) {
+      OCR_DL.running = false;
+      OCR_DL.error = String(e);
+      render();
+      return;
+    }
+    startOcrPoll();
+  };
   const srcSeg = seg([["auto", "自动"], ["hf", "官方"], ["custom", "自定义"]], OCR_SRC, (x) => {
     OCR_SRC = x;
     render();
   });
+  const srcCtl = h("div", "ctl");
+  srcCtl.append(srcSeg, dl);
   oc.append(row("下载源", "自动 = hf-mirror.com 优先、失败退官方；字典和 GitHub 地址自动走 ghproxy 加速",
-    srcSeg));
+    srcCtl));
   if (OCR_SRC === "custom") {
     oc.append(row("自定义地址", "填模型目录前缀（含 PP-OCRv4/ 的那一层），或 GitHub 地址（自动套镜像）",
       textInput(OCR_CUSTOM, "https://…/SWHL/RapidOCR/resolve/main", (x) => { OCR_CUSTOM = x; })));
   }
 
-  // 进度条
-  const track = h("div");
-  track.style.cssText = "height:6px;width:220px;background:rgba(128,128,128,.22);border-radius:3px;overflow:hidden";
-  const pbar = h("div");
-  pbar.id = "ocr-progress";
-  pbar.style.cssText = "height:100%;width:0;background:#2e90fa;transition:width .2s";
-  track.append(pbar);
-  const plabel = h("div", "hint", st && st.installed ? "已就绪" : "约 15 MB：det 4.5 MB + rec 10.4 MB + 字典");
-  plabel.id = "ocr-progress-label";
-  plabel.style.marginTop = "6px";
-  const progWrap = h("div");
-  progWrap.append(track, plabel);
-  oc.append(row("下载进度", "下载完成后立即可用，常驻进程下次识别自动加载", progWrap));
+  // 进度条：只在下载中或失败后出现（平时不占一行）
+  if (OCR_DL.running || OCR_DL.error) {
+    const track = h("div");
+    track.style.cssText = "height:6px;width:220px;background:rgba(128,128,128,.22);border-radius:3px;overflow:hidden";
+    const pbar = h("div");
+    pbar.id = "ocr-progress";
+    pbar.style.cssText = "height:100%;width:0;background:#2e90fa;transition:width .2s";
+    track.append(pbar);
+    const plabel = h("div", "hint", OCR_DL.error ? "失败：" + OCR_DL.error : "准备中…");
+    plabel.id = "ocr-progress-label";
+    plabel.style.marginTop = "6px";
+    const progWrap = h("div");
+    progWrap.append(track, plabel);
+    oc.append(row("下载进度",
+      OCR_DL.error ? "可以点「重新下载」再试一次；详细原因见 logs/" : "下载完成后立即可用，常驻进程下次识别自动加载",
+      progWrap));
+  }
 
-  // 操作按钮
-  const dl = h("button", "btn", st && st.installed ? "重新下载" : "一键下载");
-  dl.onclick = async () => {
-    dl.disabled = true;
-    await inv("ocr_model_download", { source: OCR_SRC, custom: OCR_CUSTOM });
-    startOcrPoll();
-  };
+  // 导入
   const importPath = textInput("", "本地模型目录（含 det.onnx / rec.onnx / keys.txt）", () => {});
   const imp = h("button", "btn", "导入");
   imp.onclick = async () => {
@@ -154,13 +182,16 @@ function pageCapture() {
   oc.append(row2);
 
   const del = h("button", "btn", "删除模型");
+  del.disabled = !(st && st.installed);
   del.onclick = async () => {
     if (!confirm("删除已下载的 PaddleOCR 模型？（随时可以重新下载）")) return;
     await inv("ocr_model_remove");
     await loadOcrModel();
     render();
   };
-  oc.append(row("清理", "只删 <exe>/ocr/ 下的三个文件，不碰配置", del));
+  oc.append(row("清理",
+    st && st.installed ? "只删 <exe>/ocr/ 下的三个文件，不碰配置" : "当前没有已下载的模型",
+    del));
 
   frag.append(oc);
 
