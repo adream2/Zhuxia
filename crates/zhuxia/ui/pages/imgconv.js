@@ -9,12 +9,6 @@ const IMGCONV_TARGETS = [
   ["bmp", "BMP"], ["tiff", "TIFF"], ["ico", "ICO"],
 ];
 
-function fmtBytes(n) {
-  if (!Number.isFinite(n)) return "-";
-  if (n < 1024) return n + " B";
-  if (n < 1048576) return (n / 1024).toFixed(1) + " KB";
-  return (n / 1048576).toFixed(2) + " MB";
-}
 
 /// 文件名（取路径最后一段，找不到就原样）
 function baseName(p) {
@@ -82,7 +76,7 @@ async function imgconvPick() {
       r.paths.forEach((p) => { if (!seen.has(p)) { seen.add(p); ICONV.paths.push(p); } });
       render();
     }
-  } catch (e) { toast("选文件失败：" + e); }
+  } catch (e) { /* 全局 inv 已提示 */ }
 }
 
 async function imgconvStart() {
@@ -174,7 +168,7 @@ function pageImgconv() {
       S.imgconv = await inv("imgconv_menu", { on: true });
       render();
       toast("菜单已刷新");
-    } catch (e) { toast("刷新失败：" + e); }
+    } catch (e) { /* 全局 inv 已提示 */ }
   };
   c1.append(row("刷新菜单", "换过 exe 位置、或菜单没出现时点这里重写注册表", btn));
   c1.append(row("可转换格式", "每个格式一个子菜单项", null, false,

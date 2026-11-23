@@ -6,19 +6,9 @@ let TRAFFIC = { net: { flows: [] }, alive: true, admin: false, sort: "traffic", 
 
 /* ---------- 流量 ---------- */
 
-/// 字节数 → 人类可读（和任务栏用同一套档位）
-function fmtBytes(n) {
-  n = Number(n) || 0;
-  if (n < 1024) return n + " B";
-  if (n < 1048576) return (n / 1024).toFixed(1) + " KB";
-  if (n < 1073741824) return (n / 1048576).toFixed(1) + " MB";
-  if (n < 1099511627776) return (n / 1073741824).toFixed(2) + " GB";
-  return (n / 1099511627776).toFixed(2) + " TB";
-}
-
 async function loadTraffic() {
   try {
-    const r = await inv("net_state");
+    const r = await inv("net_state", undefined, { quiet: true });
     TRAFFIC.net = r.net || { flows: [] };
     TRAFFIC.alive = !!r.alive;
     TRAFFIC.admin = !!r.admin;
@@ -192,7 +182,7 @@ function pageTraffic() {
           }
         }
       } catch (e) {
-        toast("操作失败：" + e);
+        /* 全局 inv 已提示 */
       }
       await loadTraffic();
       render();

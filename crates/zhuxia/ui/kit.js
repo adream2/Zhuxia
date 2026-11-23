@@ -176,3 +176,20 @@ function volSlider(v, onCommit) {
   return w;
 }
 
+
+/* ---------- 数值格式化（全局唯一一份） ----------
+ * 以前 traffic.js 和 imgconv.js 各写了一个 `fmtBytes`：两个文件都没包 IIFE，
+ * classic script 共享全局，后加载的 imgconv 版（封顶 MB）把 traffic 版（有 GB/TB 档）
+ * 覆盖掉了——流量页 3 GB 显示成「3072.00 MB」。这类"同名覆盖"不会报错，只会静默出错，
+ * 所以公共格式化统一放这里，页面里不要再定义同名函数。
+ */
+function fmtBytes(n) {
+  n = Number(n);
+  if (!Number.isFinite(n)) return "-";
+  if (n <= 0) return "0 B";
+  if (n < 1024) return Math.round(n) + " B";
+  if (n < 1048576) return (n / 1024).toFixed(1) + " KB";
+  if (n < 1073741824) return (n / 1048576).toFixed(1) + " MB";
+  if (n < 1099511627776) return (n / 1073741824).toFixed(2) + " GB";
+  return (n / 1099511627776).toFixed(2) + " TB";
+}

@@ -1,4 +1,16 @@
-const inv = (cmd, args) => window.__TAURI__.core.invoke(cmd, args);
+/// 统一命令入口：失败时默认弹一次提示。
+///
+/// 以前 72 处调用里只有 4 处 catch——命令失败（文件被占用、权限不足、常驻没起来）
+/// 时界面毫无反应，用户以为点漏了。这里统一兜底；轮询类调用传 `{ quiet: true }`，
+/// 免得常驻没起来时每 3 秒弹一次。
+const inv = (cmd, args, opts) =>
+  window.__TAURI__.core.invoke(cmd, args).catch((e) => {
+    if (!(opts && opts.quiet)) {
+      const msg = e && e.message ? e.message : String(e);
+      toast("操作失败：" + msg);
+    }
+    throw e;   // 调用方仍可用 try/catch 做自己的处理
+  });
 
 let S = null;        // 完整状态
 // 支持 index.html?page=appearance 直达某页（--settings appearance 会带上来）
@@ -38,25 +50,31 @@ async function save(scope, obj) {
   const sc = SCOPES[scope];
   try {
     const r = await inv(sc.cmd, { patch: obj });
+    // 后端会把落盘失败的原因挂在返回对象上（写 settings.yaml 失败时）
+    const fail = r && r.saveError;
+    if (fail) delete r.saveError;
     sc.apply(r);
     applyTheme();
     render();
-    toast("已保存");
-    return true;
+    toast(fail ? "保存失败：" + fail : "已保存");
+    return !fail;
   } catch (e) {
-    toast("保存失败：" + e);
-    return false;
+    return false; // 全局 inv 已经提示过，这里不重复弹
   }
 }
 
 // 根配置：仪表盘外观这类跨模块字段（返回全量 state）
 async function patch(obj) {
   try {
-    S = await inv("patch", { patch: obj });
+    const r = await inv("patch", { patch: obj });
+    const fail = r && r.saveError;
+    if (fail) delete r.saveError;
+    S = r;
     applyTheme();
     render();
+    if (fail) toast("保存失败：" + fail);
   } catch (e) {
-    toast("保存失败：" + e);
+    /* 全局 inv 已提示 */
   }
 }
 
@@ -138,7 +156,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   setInterval(async () => {
     if (document.visibilityState !== "visible") return;
     try {
-      const want = await inv("take_page_request");
+      const want = await inv("take_page_request", undefined, { quiet: true });
       if (want && want !== page && PAGES[want]) {
         page = want;
         if (page === "traffic") await loadTraffic();

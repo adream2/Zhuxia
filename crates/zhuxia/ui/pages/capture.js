@@ -32,7 +32,7 @@ function startOcrPoll() {
   let idleTicks = 0;
   OCR_TIMER = setInterval(async () => {
     let p = null;
-    try { p = await inv("ocr_model_progress"); } catch (e) { p = null; }
+    try { p = await inv("ocr_model_progress", undefined, { quiet: true }); } catch (e) { p = null; }
     const bar = document.getElementById("ocr-progress");
     const label = document.getElementById("ocr-progress-label");
     if (!p) return;

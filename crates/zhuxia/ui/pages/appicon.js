@@ -11,7 +11,7 @@ async function appiconPick() {
       r.paths.forEach((p) => { if (!seen.has(p)) { seen.add(p); AICON.paths.push(p); } });
       render();
     }
-  } catch (e) { toast("选文件失败：" + e); }
+  } catch (e) { /* 全局 inv 已提示 */ }
 }
 
 async function appiconStart() {
@@ -114,7 +114,7 @@ function pageAppicon() {
       S.appicon = await inv("appicon_menu", { on: true });
       render();
       toast("菜单已刷新");
-    } catch (e) { toast("刷新失败：" + e); }
+    } catch (e) { /* 全局 inv 已提示 */ }
   };
   c1.append(row("刷新菜单", "换了 exe 路径、或菜单没出现时点这里重写注册表", btn));
   c1.append(row("挂载扩展名", "每个格式一个父菜单，共用同一个三选一子菜单", null, false,
