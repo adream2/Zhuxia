@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use crate::error::IconError;
-use crate::model::{fit_long, png_bytes, resize, square_pad, Frame, IconSet};
+use crate::model::{fit_long, png_bytes, resize, square_pad, IconSet};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Mode {
@@ -250,9 +250,4 @@ fn manifest(source: &Path, set: &IconSet) -> String {
         ));
     }
     s
-}
-
-/// 给提示卡用：把一帧的规格说清楚。
-pub fn describe_frame(f: &Frame) -> String {
-    format!("{}×{} · {}", f.w, f.h, f.origin)
 }

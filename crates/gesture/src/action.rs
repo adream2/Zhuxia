@@ -370,7 +370,6 @@ fn mouse_event(flags: windows::Win32::UI::Input::KeyboardAndMouse::MOUSE_EVENT_F
 
 #[cfg(test)]
 mod tests {
-    use super::*;
 
     #[test]
     fn similar_window_filter() {

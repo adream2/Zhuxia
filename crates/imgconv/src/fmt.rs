@@ -119,8 +119,3 @@ pub fn gdiplus_reads(ext: &str) -> bool {
 pub fn is_input(ext: &str) -> bool {
     ext == "webp" || ext == "svg" || ext == "svgz" || gdiplus_reads(ext)
 }
-
-/// 矢量输入（要跑 resvg，尺寸策略与位图不同）。
-pub fn is_svg(ext: &str) -> bool {
-    ext == "svg" || ext == "svgz"
-}

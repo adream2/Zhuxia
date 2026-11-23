@@ -132,14 +132,6 @@ pub fn clear(key: &str) -> Result<(), String> {
     write(&map)
 }
 
-/// 删除某个平台的所有密钥（设置页"清空该平台"）。
-pub fn clear_provider(provider: &str) -> Result<(), String> {
-    let mut map = all();
-    let prefix = format!("{provider}.");
-    map.retain(|k, _| !k.starts_with(&prefix));
-    write(&map)
-}
-
 fn write(map: &BTreeMap<String, String>) -> Result<(), String> {
     let _ = std::fs::create_dir_all(dir());
     let mut plain = serde_json::to_vec(map).map_err(|e| format!("序列化密钥失败：{e}"))?;

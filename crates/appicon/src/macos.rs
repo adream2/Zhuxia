@@ -110,10 +110,6 @@ fn load_icns_or_image(data: &[u8], name: &str) -> Result<IconSet, IconError> {
 
 /* --------------------------------- DMG --------------------------------- */
 
-pub fn is_dmg(data: &[u8]) -> bool {
-    data.len() >= 512 && &data[data.len() - 512..data.len() - 508] == b"koly"
-}
-
 pub fn dmg(path: &Path) -> Result<IconSet, IconError> {
     let mut arch = udif::DmgArchive::open(path)
         .map_err(|e| IconError::Corrupt(format!("DMG 打开失败：{e}")))?;

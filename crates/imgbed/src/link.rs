@@ -29,10 +29,6 @@ pub const PRESETS: &[(&str, &str, &str)] = &[
     ("pages", "GitHub Pages", "https://{{owner}}.github.io/{{repo}}/{{path}}"),
 ];
 
-pub fn preset_list() -> Vec<(&'static str, &'static str)> {
-    PRESETS.iter().map(|(id, label, _)| (*id, *label)).collect()
-}
-
 /// `cdn + 自定义模板` → 实际模板。
 pub fn template_for(cdn: &str, custom: &str) -> Result<String, String> {
     if cdn == "custom" {

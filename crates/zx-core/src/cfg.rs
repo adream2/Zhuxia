@@ -1335,24 +1335,25 @@ impl Settings {
         a
     }
 
-    pub fn save(&self, path: &Path) {
+    pub fn save(&self, path: &Path) -> Result<(), String> {
         // 只写非默认值：与上游的 OmitNull 一致，配置文件永远是一份"变更清单"。
         // 递归剪掉 null —— 只剪顶层是不够的：`capture_patch` / `clipboard_patch` 会把
         // 整段 `Option` 结构反序列化成 `enabled: null, hotkey: null, …` 写进文件。
-        let text = match serde_yaml::to_value(self) {
-            Ok(v) => match prune_nulls(v) {
-                Some(v) => serde_yaml::to_string(&v).unwrap_or_default(),
-                None => return,
-            },
-            Err(_) => return,
-        };
+        let value = serde_yaml::to_value(self).map_err(|e| format!("序列化失败：{e}"))?;
+        // 全默认值剪完是空的：不写文件（保持"文件只记改动"的语义），也算成功。
+        let Some(value) = prune_nulls(value) else { return Ok(()) };
+        let text = serde_yaml::to_string(&value).map_err(|e| format!("序列化失败：{e}"))?;
+
         let tmp = path.with_extension("yaml.tmp");
-        if std::fs::write(&tmp, text).is_err() { return; }
+        std::fs::write(&tmp, text).map_err(|e| format!("写 {} 失败：{e}", tmp.display()))?;
         // 原子替换：老实现"先删后改名"会在中间态丢掉整份配置。
-        if std::fs::rename(&tmp, path).is_err() {
-            let _ = std::fs::copy(&tmp, path);
+        if let Err(e) = std::fs::rename(&tmp, path) {
+            // 文件被占用 / 跨卷时 rename 会失败，退回复制；两条路都失败才算真失败。
+            std::fs::copy(&tmp, path)
+                .map_err(|e2| format!("改名失败（{e}），复制也失败：{e2}"))?;
             let _ = std::fs::remove_file(&tmp);
         }
+        Ok(())
     }
 }
 
@@ -1379,6 +1380,30 @@ fn prune_nulls(v: serde_yaml::Value) -> Option<serde_yaml::Value> {
 /// 全局配置：UI 线程写、采样线程读，一次一整份克隆（开销可忽略，1s 一次）。
 static CFG: OnceLock<Mutex<Settings>> = OnceLock::new();
 
+/// 最近一次落盘失败的原因。
+///
+/// `save()` 以前把失败全吞了：盘满、杀软锁文件、目录只读时界面照样提示"已保存"，
+/// 重启后设置回退，现象是"设置莫名其妙丢了"。现在失败原因存在这里，
+/// 面板每次返回状态时取走一次并提示（`take_save_error` 是消费语义，不会反复弹）。
+static SAVE_ERR: Mutex<Option<String>> = Mutex::new(None);
+
+/// 取走最近的落盘失败原因（取一次就清空）。
+pub fn take_save_error() -> Option<String> {
+    SAVE_ERR.lock().ok().and_then(|mut g| g.take())
+}
+
+fn record_save(r: Result<(), String>) {
+    match r {
+        Ok(()) => {}
+        Err(e) => {
+            crate::log::error(format!("配置落盘失败：{e}"));
+            if let Ok(mut g) = SAVE_ERR.lock() {
+                *g = Some(e);
+            }
+        }
+    }
+}
+
 /// 当前配置快照。
 ///
 /// 锁中毒不 panic：release 编译开了 `panic = "abort"`，这里 unwrap 一次失手就是整个进程没了，
@@ -1403,7 +1428,7 @@ pub fn update_cfg(f: impl FnOnce(&mut Settings)) {
         *g = disk;
     }
     f(&mut g);
-    if let Some(p) = settings_path() { g.save(&p); }
+    if let Some(p) = settings_path() { record_save(g.save(&p)); }
 }
 
 /// 只读磁盘上的配置；文件不存在 / 解析失败时返回 None（调用方保留现有内存值）。
@@ -1417,7 +1442,7 @@ fn read_settings_from_disk() -> Option<Settings> {
 pub fn set(s: Settings) {
     let m = CFG.get_or_init(|| Mutex::new(Settings::default()));
     *match m.lock() { Ok(g) => g, Err(e) => e.into_inner() } = s.clone();
-    if let Some(p) = settings_path() { s.save(&p); }
+    if let Some(p) = settings_path() { record_save(s.save(&p)); }
 }
 
 /// 从磁盘重新读取并替换全局配置（面板进程改完文件后，常驻进程靠它同步）。
@@ -1641,6 +1666,30 @@ mod tests {
         assert!(Settings::default().clipboard().capture_rich_text);
         let s: Settings = serde_yaml::from_str("clipboard:\n  captureRichText: false\n").unwrap();
         assert!(!s.clipboard().capture_rich_text);
+    }
+
+    #[test]
+    fn save_reports_failure_instead_of_swallowing_it() {
+        // 父目录不存在 → 写 tmp 必失败。以前 save() 返回 ()，这条路径被静默吞掉，
+        // 面板照样提示"已保存"。现在必须拿到 Err，并在日志里留一行。
+        let mut s = Settings::default();
+        s.floating_mode = Some(false); // 保证序列化后不是空表（空表会走"不写文件"分支）
+        let missing = std::path::Path::new("Z:\\zhuxia-audit-no-such-dir\\settings.yaml");
+        let r = s.save(missing);
+        assert!(r.is_err(), "写入不存在的目录必须报错，实际：{r:?}");
+        assert!(r.unwrap_err().contains("失败"));
+    }
+
+    #[test]
+    fn save_all_defaults_is_a_noop_but_not_an_error() {
+        // 全是默认值时剪完为空表：按"文件只记改动"的语义不写文件，但不算失败。
+        let s = Settings::default();
+        let dir = std::env::temp_dir().join("zhuxia-cfg-test");
+        let _ = std::fs::create_dir_all(&dir);
+        let p = dir.join("settings.yaml");
+        let _ = std::fs::remove_file(&p);
+        assert!(s.save(&p).is_ok());
+        assert!(!p.exists(), "全默认值不该写文件");
     }
 
     #[test]

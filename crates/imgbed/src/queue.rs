@@ -47,10 +47,6 @@ pub fn submit(job: Job) {
     submit_inner(Work { job, quiet: false });
 }
 
-pub fn submit_quiet(job: Job) {
-    submit_inner(Work { job, quiet: true });
-}
-
 fn submit_inner(w: Work) {
     start();
     let failed = match TX.get() {

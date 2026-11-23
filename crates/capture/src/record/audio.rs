@@ -385,17 +385,6 @@ pub fn devices(capture: bool) -> Vec<Device> {
     out
 }
 
-/// 默认麦克风的名字与 id（空设备时 `None`）。
-pub fn default_mic() -> Option<Device> {
-    unsafe {
-        let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
-        let en: IMMDeviceEnumerator =
-            CoCreateInstance(&CLSID_MMDEVICE_ENUMERATOR, None, CLSCTX_ALL).ok()?;
-        let dev = en.GetDefaultAudioEndpoint(eCapture, eConsole).ok()?;
-        Some(Device { name: friendly_name(&dev), id: device_id(&dev) })
-    }
-}
-
 /// 默认播放设备的名字（系统声音的来源）。
 pub fn default_speaker() -> Option<String> {
     unsafe {

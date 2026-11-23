@@ -32,7 +32,6 @@ pub struct Arsc {
 
 struct Package {
     id: u32,
-    types: Vec<String>,
     entries: Vec<TypeEntry>,
 }
 
@@ -100,14 +99,6 @@ impl Arsc {
         }
     }
 
-    /// 类型名（调试/日志用）。
-    pub fn type_name(&self, id: u32) -> Option<&str> {
-        let pkg_id = (id >> 24) & 0xFF;
-        let type_id = ((id >> 16) & 0xFF) as u8;
-        let pkg = self.packages.iter().find(|p| p.id == pkg_id)?;
-        pkg.types.get(type_id as usize - 1).map(|s| s.as_str())
-    }
-
     pub fn data(&self) -> &[u8] {
         &self.data
     }
@@ -118,10 +109,8 @@ fn parse_package(data: &[u8], base: usize, size: usize, end: usize) -> Option<Pa
         return None;
     }
     let id = rd32(data, base + 8)?;
-    let type_off = rd32(data, base + 268)? as usize;
-    let key_off = rd32(data, base + 276)? as usize;
-    let types = parse_pool(data, base + type_off, end).map(|p| p.strings).unwrap_or_default();
-    let _keys = parse_pool(data, base + key_off, end).map(|p| p.strings).unwrap_or_default();
+    // 类型池 / 键池只在"按名字反查资源"时才需要；当前实现只按 resource id 取图标，
+    // 解析出来没人用（以前 `type_name` 读取过 types，那个调试函数已删），不再做无谓解析。
 
     let hdr = u16::from_le_bytes([data[base + 2], data[base + 3]]) as usize;
     let mut entries = Vec::new();
@@ -137,7 +126,7 @@ fn parse_package(data: &[u8], base: usize, size: usize, end: usize) -> Option<Pa
         }
         p += csize;
     }
-    Some(Package { id, types, entries })
+    Some(Package { id, entries })
 }
 
 fn parse_type(data: &[u8], base: usize, size: usize, out: &mut Vec<TypeEntry>) {

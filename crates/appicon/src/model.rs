@@ -48,11 +48,6 @@ impl Frame {
         Ok(Frame { w, h, rgba, png: None, origin: origin.into(), rank: 0 })
     }
 
-    pub fn with_png(mut self, png: Vec<u8>) -> Self {
-        self.png = Some(png);
-        self
-    }
-
     pub fn area(&self) -> u64 {
         self.w as u64 * self.h as u64
     }

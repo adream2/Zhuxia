@@ -92,11 +92,6 @@ pub fn upload_png(bytes: Vec<u8>) {
     queue::submit(queue::Job::Bytes { name: None, bytes });
 }
 
-/// 命令行/托盘：本地文件。
-pub fn upload_paths(paths: Vec<PathBuf>) {
-    queue::submit(queue::Job::Files(paths));
-}
-
 /// 热键/托盘：剪贴板图片。
 pub fn upload_clipboard() {
     hotkey::trigger();

@@ -8,10 +8,6 @@ use std::path::{Path, PathBuf};
 
 use crate::error::IconError;
 
-pub fn is_lnk(data: &[u8]) -> bool {
-    data.len() >= 0x4C && &data[..4] == &[0x4C, 0x00, 0x00, 0x00]
-}
-
 #[derive(Debug, Default)]
 pub struct Link {
     pub icon_location: Option<String>,

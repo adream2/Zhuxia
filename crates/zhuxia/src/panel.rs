@@ -280,7 +280,7 @@ fn patch(patch: Value) -> Value {
         zx_core::cfg::set(next);
         taskmon::runtime::broadcast_reload();
     }
-    state_json()
+    with_save_error(state_json())
 }
 
 #[tauri::command]
@@ -475,9 +475,12 @@ async fn imgconv_run(paths: Vec<String>, target: String) -> Value {
         return json!({ "items": [], "error": format!("不认识的目标格式：{target}") });
     };
     let files: Vec<std::path::PathBuf> = paths.into_iter().map(std::path::PathBuf::from).collect();
-    let results = tauri::async_runtime::spawn_blocking(move || imgconv::convert_batch(&files, fmt))
-        .await
-        .unwrap_or_default();
+    // JoinError = 批量线程 panic 或被取消。以前用 unwrap_or_default() 吞掉，
+    // 前端会显示"成功 0 个 · 失败 0 个"，像是任务没跑，实际是线程崩了。
+    let results = match tauri::async_runtime::spawn_blocking(move || imgconv::convert_batch(&files, fmt)).await {
+        Ok(r) => r,
+        Err(e) => return json!({ "items": [], "error": format!("转换线程异常退出：{e}") }),
+    };
     let mut ok = 0usize;
     let items: Vec<Value> = results
         .into_iter()
@@ -576,9 +579,10 @@ async fn appicon_run(paths: Vec<String>, mode: String) -> Value {
         return json!({ "items": [], "error": format!("不认识的输出形态：{mode}") });
     };
     let files: Vec<std::path::PathBuf> = paths.into_iter().map(std::path::PathBuf::from).collect();
-    let results = tauri::async_runtime::spawn_blocking(move || appicon::extract_batch(&files, m))
-        .await
-        .unwrap_or_default();
+    let results = match tauri::async_runtime::spawn_blocking(move || appicon::extract_batch(&files, m)).await {
+        Ok(r) => r,
+        Err(e) => return json!({ "items": [], "error": format!("提取线程异常退出：{e}") }),
+    };
     let mut ok = 0usize;
     let items: Vec<Value> = results
         .into_iter()
@@ -1529,6 +1533,19 @@ fn begin_patch() -> zx_core::Settings {
     zx_core::cfg::cfg()
 }
 
+/// 把"上次落盘失败"的原因挂到返回的状态对象上（有才挂）。
+///
+/// 前端拿到的还是原来的结构，只多一个可选的 `saveError`；没有失败时完全不变，
+/// 所以老的调用方不用改。取走即清空，避免同一个错误反复弹提示。
+fn with_save_error(mut v: Value) -> Value {
+    if let Some(e) = zx_core::cfg::take_save_error() {
+        if let Some(obj) = v.as_object_mut() {
+            obj.insert("saveError".to_string(), Value::String(e));
+        }
+    }
+    v
+}
+
 /// 写一段配置并返回该模块的视图。
 ///
 /// 所有 `*_patch` 共用这一条路径：读盘对齐 → 合并补丁 → 反序列化 → 整份落盘 →
@@ -1561,7 +1578,7 @@ where
         taskmon::runtime::broadcast_reload();
         after();
     }
-    view()
+    with_save_error(view())
 }
 
 fn merge(base: &mut Value, patch: &Value) {
