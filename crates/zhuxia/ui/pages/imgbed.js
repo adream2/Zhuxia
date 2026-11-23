@@ -1,3 +1,4 @@
+(() => {
 /* ---------- 图床/开发工具挂载页（自 app.js 拆出） ---------- */
 
 function pageImgbed() {
@@ -29,3 +30,6 @@ function pageDevtools() {
   return frag;
 }
 
+window.pageImgbed = pageImgbed;
+window.pageDevtools = pageDevtools;
+})();

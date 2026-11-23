@@ -1,3 +1,4 @@
+(() => {
 /* ---------- 剪贴板：统计与保存（自 app.js 拆出） ---------- */
 
 let CLIPSTATS = null;
@@ -155,3 +156,6 @@ function pageClipboard() {
   return frag;
 }
 
+window.pageClipboard = pageClipboard;
+window.loadClip = loadClip;
+})();

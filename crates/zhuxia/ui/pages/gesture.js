@@ -1,3 +1,4 @@
+(() => {
 /* ---------- 手势（自 app.js 拆出） ---------- */
 
 /* ---------- 手势 ---------- */
@@ -391,3 +392,5 @@ function pageGesture() {
   return frag;
 }
 
+window.pageGesture = pageGesture;
+})();

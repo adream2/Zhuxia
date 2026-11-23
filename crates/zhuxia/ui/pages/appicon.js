@@ -1,3 +1,4 @@
+(() => {
 /* ---------- 图标提取（自 app.js 拆出） ---------- */
 
 /* 操作页的临时状态（同图片转换：只活在面板进程里，不落盘） */
@@ -155,3 +156,6 @@ function pageAppicon() {
   frag.append(c4);
   return frag;
 }
+
+window.pageAppicon = pageAppicon;
+})();

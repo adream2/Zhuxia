@@ -1,3 +1,4 @@
+(() => {
 /* ---------- 外观（自 app.js 拆出） ---------- */
 
 function selectedDisplayIds() {
@@ -105,4 +106,5 @@ function pageAppearance() {
   return frag;
 }
 
-
+window.pageAppearance = pageAppearance;
+})();

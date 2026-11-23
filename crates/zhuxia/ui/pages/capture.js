@@ -1,3 +1,4 @@
+(() => {
 /* ---------- 截图：OCR 与保存（自 app.js 拆出） ---------- */
 
 /* ---------- 截图 ---------- */
@@ -226,3 +227,5 @@ function pageCapture() {
   return frag;
 }
 
+window.pageCapture = pageCapture;
+})();

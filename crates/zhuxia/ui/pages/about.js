@@ -1,3 +1,4 @@
+(() => {
 /* ---------- 关于（自 app.js 拆出） ---------- */
 
 function pageAbout() {
@@ -113,3 +114,6 @@ function pageAbout() {
   frag.append(notes);
   return frag;
 }
+
+window.pageAbout = pageAbout;
+})();

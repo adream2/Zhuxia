@@ -1,3 +1,4 @@
+(() => {
 /* ---------- 任务栏槽位（自 app.js 拆出） ---------- */
 
 /* ---------- 采样项目（自 app.js 拆出） ---------- */
@@ -91,3 +92,5 @@ function pageSampling() {
   return frag;
 }
 
+window.pageSampling = pageSampling;
+})();

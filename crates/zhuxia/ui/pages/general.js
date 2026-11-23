@@ -1,3 +1,4 @@
+(() => {
 /* ---------- 通用（自 app.js 拆出） ---------- */
 
 function pageGeneral() {
@@ -23,3 +24,6 @@ function pageGeneral() {
 }
 
 /* 任务栏覆盖层要挂到哪些屏幕。配置为空 = 只跟主屏（上游旧配置的语义）。 */
+
+window.pageGeneral = pageGeneral;
+})();

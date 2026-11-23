@@ -193,3 +193,48 @@ function fmtBytes(n) {
   if (n < 1099511627776) return (n / 1073741824).toFixed(2) + " GB";
   return (n / 1099511627776).toFixed(2) + " TB";
 }
+
+/* ---------- 结果列表（图片转换 / 图标提取共用） ----------
+ * 放在 kit 里：pages/*.js 各自包在 IIFE 里，跨页共用的东西必须有唯一落点，
+ * 否则又是一个「同名覆盖」的坑（见 fmtBytes 那次）。 */
+
+/// 文件名（取路径最后一段，找不到就原样）
+function baseName(p) {
+  const s = String(p || "");
+  const i = Math.max(s.lastIndexOf("\\"), s.lastIndexOf("/"));
+  return i >= 0 ? s.slice(i + 1) : s;
+}
+
+function convSummary(items) {
+  const ok = items.filter((x) => x.ok).length;
+  const bad = items.length - ok;
+  const s = h("div", "hint");
+  s.textContent = "成功 " + ok + " 个" + (bad ? " · 失败 " + bad + " 个" : "");
+  s.style.margin = "8px 0";
+  return s;
+}
+
+/// 结果列表：成功一行「名字 → 输出名 · 体积变化 · 耗时」，失败一行原因
+function resultList(items) {
+  const box = h("div", "conv-results");
+  items.forEach((it) => {
+    const line = h("div", "conv-item" + (it.ok ? "" : " bad"));
+    const name = h("div", "conv-name", baseName(it.source));
+    name.title = it.source;
+    line.append(name);
+    if (it.ok) {
+      const detail = it.outputs
+        ? it.outputs.length + " 个文件 · " + it.detail
+        : baseName(it.output) + " · " + it.width + "×" + it.height +
+          (it.srcBytes && it.outBytes
+            ? " · " + fmtBytes(it.srcBytes) + " → " + fmtBytes(it.outBytes)
+            : "") + " · " + it.ms + " ms";
+      line.append(h("div", "conv-detail", detail));
+      if (it.notice) line.append(h("div", "conv-note", it.notice));
+    } else {
+      line.append(h("div", "conv-detail", it.error + (it.detail ? "：" + it.detail : "")));
+    }
+    box.append(line);
+  });
+  return box;
+}

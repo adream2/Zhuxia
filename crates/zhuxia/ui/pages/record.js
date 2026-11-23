@@ -1,3 +1,4 @@
+(() => {
 /* ---------- 录屏（自 app.js 拆出） ---------- */
 
 /* ---------------- 录屏（GIF + 摄像头合成） ---------------- */
@@ -166,3 +167,5 @@ function pageRecord() {
   return frag;
 }
 
+window.pageRecord = pageRecord;
+})();

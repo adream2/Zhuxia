@@ -1,3 +1,4 @@
+(() => {
 /* ---------- 流量状态（自 app.js 拆出） ---------- */
 
 let TRAFFIC = { net: { flows: [] }, alive: true, admin: false, sort: "traffic", q: "", timer: 0 };
@@ -200,3 +201,6 @@ function pageTraffic() {
   return frag;
 }
 
+window.pageTraffic = pageTraffic;
+window.loadTraffic = loadTraffic;
+})();
