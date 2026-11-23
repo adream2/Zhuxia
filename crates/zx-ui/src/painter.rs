@@ -319,7 +319,6 @@ impl Canvas {
         unsafe {
             let b = self.brush(argb);
             GdipFillEllipse(self.g, b as *mut _, x, y, w, h);
-            GdipDeleteBrush(b as *mut _);
         }
     }
 
@@ -400,7 +399,6 @@ impl Canvas {
         let rect = RectF { X: x, Y: y, Width: w, Height: h };
         unsafe {
             GdipDrawString(self.g, PCWSTR(wide.as_ptr()), wide.len() as i32, font, &rect, fmt, b as *const _);
-            GdipDeleteBrush(b as *mut _);
         }
     }
 
@@ -422,7 +420,6 @@ impl Canvas {
             let rect = RectF { X: x, Y: y, Width: w, Height: h };
             GdipDrawString(self.g, PCWSTR(wide.as_ptr()), wide.len() as i32, font, &rect, fmt, b as *const _);
             GdipDeleteStringFormat(fmt);
-            GdipDeleteBrush(b as *mut _);
         }
     }
 
@@ -490,7 +487,6 @@ impl Canvas {
         let rect = RectF { X: x, Y: y, Width: w, Height: h };
         unsafe {
             GdipDrawString(self.g, PCWSTR(wide.as_ptr()), wide.len() as i32, font, &rect, fmt, b as *const _);
-            GdipDeleteBrush(b as *mut _);
         }
     }
 
