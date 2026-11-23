@@ -195,6 +195,9 @@ fn write_webp(w: u32, h: u32, rgba: &[u8], q: Quality, path: &Path) -> Result<()
 }
 
 /// GDI+ 编码（JPG/GIF/BMP/TIFF）。quality 只对 JPEG 生效，其余格式忽略。
+    // GDI+ 的 EncoderParameters 必须分步填：Value 字段要指向栈上的局部变量，
+    // 写成结构体字面量会借不到那个变量的地址。
+    #[allow(clippy::field_reassign_with_default)]
 fn write_gdiplus(
     w: u32,
     h: u32,

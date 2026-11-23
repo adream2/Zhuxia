@@ -617,7 +617,8 @@ fn mosaic(canvas: &mut Canvas, x0: f32, y0: f32, w: f32, h: f32, block: i32) {
                     }
                     sy += step_y;
                 }
-                if n > 0 {
+                if let Some(n) = std::num::NonZeroU64::new(n) {
+                    let n = n.get();
                     let argb = 0xFF00_0000
                         | (((r / n) as u32) << 16)
                         | (((g / n) as u32) << 8)

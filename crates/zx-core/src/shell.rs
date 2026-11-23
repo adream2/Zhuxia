@@ -171,6 +171,15 @@ fn legacy_parent(spec: &VerbSpec, ext: &str) -> String {
     format!("Software\\Classes\\.{ext}\\shell\\{}", spec.key)
 }
 
+/// 公共子菜单在注册表里的实际根路径。
+///
+/// `ExtendedSubCommandsKey` 的值是「相对 HKCR 的短名」（`Xxx.Targets`），
+/// 但**写注册表时必须补上 `Software\Classes\` 前缀**——少了它就会写到
+/// `HKCU\Xxx.Targets`（一个和外壳无关的野键），菜单照旧指向旧位置。
+fn targets_root(spec: &VerbSpec) -> String {
+    format!("Software\\Classes\\{}", spec.targets_key)
+}
+
 /// 装/刷新菜单。返回装了几个扩展名。
 pub fn install(spec: &VerbSpec) -> Result<usize, String> {
     let exe = exe_path();
@@ -180,7 +189,7 @@ pub fn install(spec: &VerbSpec) -> Result<usize, String> {
 
     // 1) 公共子菜单：每个目标一招
     for (i, (id, default, mui)) in (spec.items)().into_iter().enumerate() {
-        let sub = format!("{}\\shell\\{:02}_{}", spec.targets_key, i + 1, id);
+        let sub = format!("{}\\shell\\{:02}_{}", targets_root(spec), i + 1, id);
         set_sz(&sub, None, &default)?;
         set_sz(&sub, Some("MUIVerb"), &mui)?;
         set_sz(&sub, Some("Icon"), &format!("{exe},0"))?;
@@ -221,8 +230,11 @@ pub fn remove(spec: &VerbSpec) -> Result<(), String> {
             }
         }
     }
-    if let Err(e) = delete_tree(spec.targets_key) {
-        first_err.get_or_insert(e);
+    for sub in [targets_root(spec), spec.targets_key.to_string()] {
+        // 第二个是修这个前缀 bug 之前误写到 HKCU 根下的野键，一并清掉
+        if let Err(e) = delete_tree(&sub) {
+            first_err.get_or_insert(e);
+        }
     }
     notify_shell();
     match first_err {
@@ -234,7 +246,7 @@ pub fn remove(spec: &VerbSpec) -> Result<(), String> {
 /// 菜单当前指向的 exe（读第一项子菜单的 command）。装过但路径变了要重写。
 pub fn registered_exe(spec: &VerbSpec) -> Option<String> {
     let first = (spec.items)().first()?.0.to_string();
-    let sub = format!("{}\\shell\\01_{}\\command", spec.targets_key, first);
+    let sub = format!("{}\\shell\\01_{}\\command", targets_root(spec), first);
     let text = get_sz(&sub, None)?;
     let rest = text.trim_matches('\u{0}').strip_prefix('"')?;
     let end = rest.find('"')?;
@@ -258,7 +270,7 @@ pub fn installed(spec: &VerbSpec) -> bool {
         return false;
     }
     (spec.items)().iter().enumerate().any(|(i, (id, _, _))| {
-        get_sz(&format!("{}\\shell\\{:02}_{}\\command", spec.targets_key, i + 1, id), None)
+        get_sz(&format!("{}\\shell\\{:02}_{}\\command", targets_root(spec), i + 1, id), None)
             .map(|v| !v.trim().is_empty())
             .unwrap_or(false)
     })
@@ -299,5 +311,34 @@ mod tests {
         );
         // 旧位置只用于卸载迁移，不能再往回写
         assert_eq!(legacy_parent(&SPEC, "png"), r"Software\Classes\.png\shell\ZhuxiaTest");
+    }
+}
+
+#[cfg(test)]
+mod targets_tests {
+    use super::*;
+
+    fn no_items() -> Vec<(&'static str, String, String)> {
+        Vec::new()
+    }
+
+    const SPEC: VerbSpec = VerbSpec {
+        key: "ZhuxiaTest",
+        label: "测试",
+        targets_key: "ZhuxiaTest.Targets",
+        cli_flag: "--test",
+        probe_ext: "png",
+        exts: &["png"],
+        items: no_items,
+    };
+
+    /// 子菜单必须写在 `Software\Classes\` 下。
+    ///
+    /// `ExtendedSubCommandsKey` 的值是相对 HKCR 的短名，写入时少写这个前缀，
+    /// 就会落到 `HKCU\Xxx.Targets` 这个与外壳无关的野键上——菜单项看着正常、
+    /// 点下去却还是旧路径。
+    #[test]
+    fn targets_root_is_under_classes() {
+        assert_eq!(targets_root(&SPEC), r"Software\Classes\ZhuxiaTest.Targets");
     }
 }

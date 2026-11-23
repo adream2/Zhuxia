@@ -37,13 +37,11 @@ pub fn extract(data: &[u8]) -> Result<IconSet, IconError> {
     }
 
     let mut best: Option<(u32, IconSet)> = None;
-    let mut scanned = 0usize;
     let mut total = 0u64;
-    for p in paths {
+    for (scanned, p) in paths.into_iter().enumerate() {
         if scanned >= 4096 || total > MAX_TOTAL {
             break;
         }
-        scanned += 1;
         let Ok(mut s) = cf.open_stream(&p) else { continue };
         let mut head = [0u8; 16];
         let mut got = 0usize;

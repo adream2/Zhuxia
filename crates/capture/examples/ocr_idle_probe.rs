@@ -11,8 +11,10 @@ fn priv_mb() -> f64 {
     use windows::Win32::System::ProcessStatus::{K32GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS};
     use windows::Win32::System::Threading::GetCurrentProcess;
     unsafe {
-        let mut c = PROCESS_MEMORY_COUNTERS::default();
-        c.cb = std::mem::size_of::<PROCESS_MEMORY_COUNTERS>() as u32;
+        let mut c = PROCESS_MEMORY_COUNTERS {
+            cb: std::mem::size_of::<PROCESS_MEMORY_COUNTERS>() as u32,
+            ..Default::default()
+        };
         let _ = K32GetProcessMemoryInfo(GetCurrentProcess(), &mut c, c.cb);
         c.PagefileUsage as f64 / (1024.0 * 1024.0)
     }

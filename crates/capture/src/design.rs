@@ -130,21 +130,45 @@ pub fn measure(cv: &mut Canvas, s: &str, px: f32, weight: i32) -> f32 {
     cv.measure_named(s, px, family(), weight)
 }
 
-pub fn hairline(cv: &mut Canvas, x: f32, y: f32, w: f32, h: f32, r: f32, color: u32, s: f32) {
-    cv.stroke_round(x, y, w, h, r, (1.0 * s).max(1.0), color);
+/// 一块矩形区域（含圆角半径）。
+///
+/// 面板/阴影/描边这几个辅助函数的几何参数永远是同一组 (x, y, w, h, r)，
+/// 平铺成 5 个 f32 既难读又容易传错位，收成一个结构体。
+#[derive(Clone, Copy, Debug)]
+pub struct Rect {
+    pub x: f32,
+    pub y: f32,
+    pub w: f32,
+    pub h: f32,
+    pub r: f32,
+}
+
+impl Rect {
+    pub const fn new(x: f32, y: f32, w: f32, h: f32, r: f32) -> Self {
+        Self { x, y, w, h, r }
+    }
+
+    /// 内缩 `n` 像素。
+    pub fn inset(self, n: f32) -> Self {
+        Self { x: self.x + n, y: self.y + n, w: self.w - n * 2.0, h: self.h - n * 2.0, ..self }
+    }
+}
+
+pub fn hairline(cv: &mut Canvas, rc: Rect, color: u32, s: f32) {
+    cv.stroke_round(rc.x, rc.y, rc.w, rc.h, rc.r, (1.0 * s).max(1.0), color);
 }
 
 /// 用多层递减透明度的圆角矩形模拟投影（GDI+ 没有模糊阴影）。
-pub fn shadow(cv: &mut Canvas, x: f32, y: f32, w: f32, h: f32, r: f32, s: f32) {
+pub fn shadow(cv: &mut Canvas, rc: Rect, s: f32) {
     for layer in (1..=6).rev() {
         let grow = layer as f32 * 2.2 * s;
         let alpha = (14 - layer * 2).max(2) as u8;
         cv.fill_round(
-            x - grow,
-            y - grow + 4.0 * s,
-            w + grow * 2.0,
-            h + grow * 2.0,
-            r + grow,
+            rc.x - grow,
+            rc.y - grow + 4.0 * s,
+            rc.w + grow * 2.0,
+            rc.h + grow * 2.0,
+            rc.r + grow,
             (alpha as u32) << 24,
         );
     }
@@ -222,37 +246,18 @@ pub fn frost(cv: &mut Canvas, x: f32, y: f32, w: f32, h: f32, radius: f32, s: f3
     }
 }
 
-pub fn floating_panel(
-    cv: &mut Canvas,
-    x: f32,
-    y: f32,
-    w: f32,
-    h: f32,
-    r: f32,
-    t: &Tokens,
-    s: f32,
-) {
-    shadow(cv, x, y, w, h, r, s);
-    let inset = r * 0.3;
-    frost(cv, x + inset, y + inset, w - inset * 2.0, h - inset * 2.0, r, s);
-    cv.fill_round(x, y, w, h, r, t.float);
-    hairline(cv, x + 0.5 * s, y + 0.5 * s, w - s, h - s, r, t.float_border, s);
+pub fn floating_panel(cv: &mut Canvas, rc: Rect, t: &Tokens, s: f32) {
+    shadow(cv, rc, s);
+    let inset = rc.r * 0.3;
+    frost(cv, rc.x + inset, rc.y + inset, rc.w - inset * 2.0, rc.h - inset * 2.0, rc.r, s);
+    cv.fill_round(rc.x, rc.y, rc.w, rc.h, rc.r, t.float);
+    hairline(cv, rc.inset(0.5 * s), t.float_border, s);
 }
 
-pub fn solid_panel(
-    cv: &mut Canvas,
-    x: f32,
-    y: f32,
-    w: f32,
-    h: f32,
-    r: f32,
-    bg: u32,
-    t: &Tokens,
-    s: f32,
-) {
-    shadow(cv, x, y, w, h, r, s);
-    cv.fill_round(x, y, w, h, r, bg);
-    hairline(cv, x + 0.5 * s, y + 0.5 * s, w - s, h - s, r, t.border_strong, s);
+pub fn solid_panel(cv: &mut Canvas, rc: Rect, bg: u32, t: &Tokens, s: f32) {
+    shadow(cv, rc, s);
+    cv.fill_round(rc.x, rc.y, rc.w, rc.h, rc.r, bg);
+    hairline(cv, rc.inset(0.5 * s), t.border_strong, s);
 }
 
 pub fn divider(cv: &mut Canvas, x: f32, y: f32, h: f32, t: &Tokens, s: f32) {
@@ -262,7 +267,7 @@ pub fn divider(cv: &mut Canvas, x: f32, y: f32, h: f32, t: &Tokens, s: f32) {
 #[allow(clippy::too_many_arguments)]
 pub fn bubble(cv: &mut Canvas, x: f32, y: f32, w: f32, h: f32, t: &Tokens, s: f32) {
     cv.fill_round(x, y, w, h, 7.0 * s, t.bubble);
-    hairline(cv, x + 0.5 * s, y + 0.5 * s, w - s, h - s, 7.0 * s, t.bubble_border, s);
+    hairline(cv, Rect::new(x, y, w, h, 7.0 * s).inset(0.5 * s), t.bubble_border, s);
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -556,12 +561,12 @@ pub fn arc(cx: f32, cy: f32, r: f32, a0: f32, a1: f32, n: usize) -> Vec<(f32, f3
 
 pub fn segmented(cv: &mut Canvas, x: f32, y: f32, w: f32, h: f32, t: &Tokens, s: f32) {
     cv.fill_round(x, y, w, h, 9.0 * s, t.field);
-    hairline(cv, x + 0.5 * s, y + 0.5 * s, w - s, h - s, 9.0 * s, t.border, s);
+    hairline(cv, Rect::new(x, y, w, h, 9.0 * s).inset(0.5 * s), t.border, s);
 }
 
 pub fn segmented_item(cv: &mut Canvas, x: f32, y: f32, w: f32, h: f32, t: &Tokens, s: f32) {
     cv.fill_round(x, y, w, h, 7.0 * s, t.raised);
-    hairline(cv, x + 0.5 * s, y + 0.5 * s, w - s, h - s, 7.0 * s, t.border_strong, s);
+    hairline(cv, Rect::new(x, y, w, h, 7.0 * s).inset(0.5 * s), t.border_strong, s);
 }
 
 pub fn switch(cv: &mut Canvas, x: f32, y: f32, on: bool, t: &Tokens, s: f32) {

@@ -390,9 +390,7 @@ mod tests {
 
     #[test]
     fn wheel_remainder_accumulates_to_one_notch() {
-        let mut m = Machine::default();
-        m.run = Some(blank_run());
-        m.wheel_remainder = 60;
+        let mut m = Machine { run: Some(blank_run()), wheel_remainder: 60, ..Default::default() };
         assert_eq!(m.wheel_remainder / NOTCH, 0);
         m.wheel_remainder += 60;
         assert_eq!(m.wheel_remainder / NOTCH, 1);

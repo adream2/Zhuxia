@@ -40,7 +40,7 @@ fn registered_commands(src: &str) -> BTreeSet<String> {
     let body = &src[start..];
     let end = body.find(']').expect("generate_handler! 没闭合");
     body[..end]
-        .split(|c| c == ',' || c == '\n')
+        .split([',', '\n'])
         .map(|s| s.trim())
         .filter(|s| !s.is_empty() && !s.starts_with("generate_handler"))
         .map(|s| s.rsplit("::").next().unwrap_or(s).to_string())

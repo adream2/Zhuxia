@@ -2,6 +2,7 @@
 //!
 //! 与 UI 无关，可被任意模块复用。
 
+pub mod batch;
 pub mod cfg;
 pub mod fmt;
 pub mod hotkey;

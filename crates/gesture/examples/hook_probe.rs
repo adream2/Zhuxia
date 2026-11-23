@@ -3,7 +3,7 @@
 //!
 //! 只用于开发验证；会短暂移动鼠标并在结束后复位。
 
-use std::sync::mpsc::{channel, RecvTimeoutError};
+use std::sync::mpsc::channel;
 use std::time::Duration;
 
 use gesture::{apply_config, cfg, engine, hook};
@@ -42,14 +42,9 @@ fn main() {
     engine::start(engine_rx);
     let relay = std::thread::spawn(move || {
         let mut count = 0usize;
-        loop {
-            match hook_rx.recv_timeout(Duration::from_secs(3)) {
-                Ok(ev) => {
-                    count += 1;
-                    println!("event {count}: {ev:?}");
-                }
-                Err(RecvTimeoutError::Timeout) | Err(RecvTimeoutError::Disconnected) => break,
-            }
+        while let Ok(ev) = hook_rx.recv_timeout(Duration::from_secs(3)) {
+            count += 1;
+            println!("event {count}: {ev:?}");
         }
         count
     });

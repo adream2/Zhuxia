@@ -59,7 +59,9 @@ fn close_panel() {
 
 /// 宿主注入的"模块动作"：托盘菜单点「截图 / 录屏」时转给宿主，
 /// taskmon 自己不认识 capture（模块之间不直接依赖）。
-static ACTIONS: std::sync::OnceLock<Box<dyn Fn(&str) + Send + Sync>> = std::sync::OnceLock::new();
+/// 宿主注入的动作回调（托盘菜单把「截图 / 录屏」转出去）。
+type ActionHook = Box<dyn Fn(&str) + Send + Sync>;
+static ACTIONS: std::sync::OnceLock<ActionHook> = std::sync::OnceLock::new();
 
 pub fn set_action_hook(f: impl Fn(&str) + Send + Sync + 'static) {
     let _ = ACTIONS.set(Box::new(f));

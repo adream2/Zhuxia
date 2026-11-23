@@ -69,7 +69,7 @@ pub fn read(data: &[u8]) -> Result<IconSet, IconError> {
                     skipped += 1;
                 }
             }
-            t if matches!(t, b"is32" | b"il32" | b"it32" | b"ih32" | b"ics#" | b"ICN#") => {
+            b"is32" | b"il32" | b"it32" | b"ih32" | b"ics#" | b"ICN#" => {
                 skipped += 1;
             }
             _ => {}

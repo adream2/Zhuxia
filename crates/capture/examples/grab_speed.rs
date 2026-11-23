@@ -169,7 +169,7 @@ fn main() {
         let raw = bench_raw_bitblt(w, h);
         report("BitBlt 本身（复用 DIB）", &raw, 33.3);
         let grab = bench_grab(w, h);
-        report(&"BitBlt 抓帧".to_string(), &grab, 33.3);
+        report("BitBlt 抓帧", &grab, 33.3);
         let comp = bench_compose(w, h);
         report("合成（画中画 + 遮罩 + 阴影）", &comp, 33.3);
         let gif = bench_gif(w, h);

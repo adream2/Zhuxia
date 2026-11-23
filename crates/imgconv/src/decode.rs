@@ -198,10 +198,12 @@ fn load_svg(path: &Path, max_side: u32) -> Result<Bitmap, ConvertError> {
         return Err(ConvertError::Corrupt("文件过大，拒绝渲染".into()));
     }
 
-    let mut opt = resvg::usvg::Options::default();
     // 字体库进程内只加载一次：load_system_fonts 要扫几千个字体文件，每次转换都扫会明显卡。
-    opt.fontdb = system_fontdb();
-    opt.resources_dir = path.parent().map(|p| p.to_path_buf());
+    let opt = resvg::usvg::Options {
+        fontdb: system_fontdb(),
+        resources_dir: path.parent().map(|p| p.to_path_buf()),
+        ..Default::default()
+    };
 
     let tree = resvg::usvg::Tree::from_data(&data, &opt)
         .map_err(|e| ConvertError::Corrupt(format!("SVG 解析失败：{e}")))?;

@@ -207,7 +207,13 @@ impl Panel {
     fn draw(&mut self) {
         let t = design::tokens();
         self.canvas.clear(0x00000000);
-        design::solid_panel(&mut self.canvas, 0.0, 0.0, W as f32, H as f32, 12.0, t.panel, &t, 1.0);
+        design::solid_panel(
+            &mut self.canvas,
+            design::Rect::new(0.0, 0.0, W as f32, H as f32, 12.0),
+            t.panel,
+            &t,
+            1.0,
+        );
 
         design::text(
             &mut self.canvas,

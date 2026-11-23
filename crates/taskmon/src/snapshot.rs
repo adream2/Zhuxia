@@ -194,13 +194,11 @@ mod tests {
 
     #[test]
     fn publish_replaces_latest_snapshot() {
-        let mut s = Snapshot::default();
-        s.cpu = 42.0;
+        let s = Snapshot { cpu: 42.0, ..Default::default() };
         publish(Arc::new(s));
         assert_eq!(latest().cpu, 42.0);
 
-        let mut s = Snapshot::default();
-        s.cpu = 7.5;
+        let s = Snapshot { cpu: 7.5, ..Default::default() };
         publish(Arc::new(s));
         assert_eq!(latest().cpu, 7.5);
     }

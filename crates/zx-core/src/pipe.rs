@@ -8,7 +8,7 @@
 //!
 //! 这里只有"管道 + 帧"这一层；id 与 path 的含义由各模块的 [`Job`] 实现决定。
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use windows::core::PCWSTR;
 use windows::Win32::Foundation::{CloseHandle, HANDLE};
@@ -37,7 +37,7 @@ pub trait Job: Sized + Send + 'static {
 }
 
 /// `(id, 路径)` 的默认编码：绝大多数模块的任务就是这个形状。
-pub fn encode_pair(id: &str, path: &PathBuf) -> String {
+pub fn encode_pair(id: &str, path: &Path) -> String {
     format!("{id}{SEP_FIELD}{}", path.to_string_lossy())
 }
 

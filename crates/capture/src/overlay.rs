@@ -217,9 +217,11 @@ fn pending_long() -> &'static std::sync::Mutex<Option<RECT>> {
 /// 录屏同理：覆盖层必须先从屏幕上消失（`CAPTUREBLT` 会把它拍进每一帧），
 /// 关窗之后再把选区交给 `record::run`。
 /// 第二个元素是“本次强制格式”：`None` = 按设置，`Some(Gif)` = 工具条的 GIF 按钮。
-static PENDING_RECORD: OnceLock<std::sync::Mutex<Option<(RECT, Option<RecordFormat>)>>> = OnceLock::new();
+/// 待处理的录屏请求：选区 + 本次强制格式（`None` = 按设置）。
+type PendingRecord = (RECT, Option<RecordFormat>);
+static PENDING_RECORD: OnceLock<std::sync::Mutex<Option<PendingRecord>>> = OnceLock::new();
 
-fn pending_record() -> &'static std::sync::Mutex<Option<(RECT, Option<RecordFormat>)>> {
+fn pending_record() -> &'static std::sync::Mutex<Option<PendingRecord>> {
     PENDING_RECORD.get_or_init(|| std::sync::Mutex::new(None))
 }
 
@@ -867,11 +869,7 @@ impl Ov {
 
         design::shadow(
             &mut self.canvas,
-            bx - 2.0 * s,
-            by - 2.0 * s,
-            side + 4.0 * s,
-            side + 4.0 * s,
-            5.0 * s,
+            design::Rect::new(bx - 2.0 * s, by - 2.0 * s, side + 4.0 * s, side + 4.0 * s, 5.0 * s),
             s,
         );
         self.canvas.fill_round(
@@ -1032,7 +1030,12 @@ impl Ov {
             }
         };
 
-        design::floating_panel(&mut self.canvas, sx, sy, total_w, total_h, 12.0 * s2, &t, s2);
+        design::floating_panel(
+            &mut self.canvas,
+            design::Rect::new(sx, sy, total_w, total_h, 12.0 * s2),
+            &t,
+            s2,
+        );
 
         let mut x = sx + pad;
         let mut hovered: Option<(RECT, Act)> = None;
@@ -1092,6 +1095,9 @@ impl Ov {
         }
     }
 
+    /// 一个工具条按钮。x/y/w/h 各自用到、且是同一块矩形，收结构体只会让内部更绕，
+    /// 这里保留平铺参数。
+    #[allow(clippy::too_many_arguments)]
     fn paint_slot(&mut self, act: Act, x: f32, y: f32, w: f32, h: f32, s: f32, hover: bool) {
         let t = self.tk;
         let active = match act {
@@ -1197,7 +1203,7 @@ impl Ov {
             .min((self.vw as f32 - w - 6.0 * s).max(6.0 * s))
             .max(6.0 * s);
         let y = (bar_y - h - 8.0 * s).max(6.0 * s);
-        design::floating_panel(&mut self.canvas, x, y, w, h, 12.0 * s, &t, s);
+        design::floating_panel(&mut self.canvas, design::Rect::new(x, y, w, h, 12.0 * s), &t, s);
 
         let mut cx = x + pad;
         let cy = y + pad;

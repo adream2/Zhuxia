@@ -1672,8 +1672,8 @@ mod tests {
     fn save_reports_failure_instead_of_swallowing_it() {
         // 父目录不存在 → 写 tmp 必失败。以前 save() 返回 ()，这条路径被静默吞掉，
         // 面板照样提示"已保存"。现在必须拿到 Err，并在日志里留一行。
-        let mut s = Settings::default();
-        s.floating_mode = Some(false); // 保证序列化后不是空表（空表会走"不写文件"分支）
+        // floating_mode 非默认：保证序列化后不是空表（空表会走「不写文件」分支）
+        let s = Settings { floating_mode: Some(false), ..Default::default() };
         let missing = std::path::Path::new("Z:\\zhuxia-audit-no-such-dir\\settings.yaml");
         let r = s.save(missing);
         assert!(r.is_err(), "写入不存在的目录必须报错，实际：{r:?}");

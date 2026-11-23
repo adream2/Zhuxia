@@ -235,8 +235,7 @@ pub fn decode_webp(data: &[u8], hint: &str) -> Result<Frame, IconError> {
 
 /// SVG 光栅化。Linux 包里大量图标只有 SVG，这一步不做等于少半个平台。
 pub fn raster_svg(data: &[u8], wanted: u32, hint: &str) -> Result<Frame, IconError> {
-    let mut opt = resvg::usvg::Options::default();
-    opt.fontdb = system_fontdb();
+    let opt = resvg::usvg::Options { fontdb: system_fontdb(), ..Default::default() };
     let tree = resvg::usvg::Tree::from_data(data, &opt)
         .map_err(|e| IconError::Corrupt(format!("{hint}：SVG 解析失败 {e}")))?;
     let size = tree.size();
