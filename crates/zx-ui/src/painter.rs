@@ -36,6 +36,9 @@ pub struct Canvas {
     /// GDI+ 的 FontStyle 只有"粗/不粗"，所以走 GDI 的 LOGFONT。
     named: HashMap<(u16, i32, String), *mut GpFont>,
     fmts: HashMap<(u8, u8, bool), *mut GpStringFormat>,
+    /// 纯色画刷按 ARGB 缓存：任务栏每帧要画几十个矩形，每次都 Create/Delete 一次
+    /// 纯属浪费（字体和 StringFormat 早就这么做了）。Drop 里统一释放。
+    brushes: HashMap<u32, *mut GpSolidFill>,
 }
 
 unsafe impl Send for Canvas {}
@@ -155,7 +158,7 @@ impl Canvas {
             Canvas {
                 w, h, dpi, dib, memdc, old, bits: bits as *mut u8, bmp, g,
                 family: pick_family(dpi), fonts: HashMap::new(), named: HashMap::new(),
-                fmts: HashMap::new(),
+                fmts: HashMap::new(), brushes: HashMap::new(),
             }
         }
     }
@@ -194,9 +197,12 @@ impl Canvas {
         unsafe { GdipGraphicsClear(self.g, argb); }
     }
 
-    fn brush(&self, argb: u32) -> *mut GpSolidFill {
+    fn brush(&mut self, argb: u32) -> *mut GpSolidFill {
+        if let Some(&b) = self.brushes.get(&argb) { return b; }
         let mut b: *mut GpSolidFill = std::ptr::null_mut();
         unsafe { GdipCreateSolidFill(argb, &mut b); }
+        // 创建失败（内存不足）时不入缓存，返回空指针让调用方画不出来即可
+        if !b.is_null() { self.brushes.insert(argb, b); }
         b
     }
 
@@ -205,7 +211,6 @@ impl Canvas {
         let b = self.brush(argb);
         unsafe {
             GdipFillRectangle(self.g, b as *mut _, x, y, w, h);
-            GdipDeleteBrush(b as *mut _);
         }
     }
 
@@ -216,7 +221,6 @@ impl Canvas {
             let path = round_path(x, y, w, h, r);
             let b = self.brush(argb);
             GdipFillPath(self.g, b as *mut _, path);
-            GdipDeleteBrush(b as *mut _);
             GdipDeletePath(path);
         }
     }
@@ -323,12 +327,10 @@ impl Canvas {
     pub fn fill_polygon(&mut self, pts: &[(f32, f32)], argb: u32) {
         if (argb >> 24) == 0 || pts.len() < 3 { return; }
         let v: Vec<PointF> = pts.iter().map(|&(x, y)| PointF { X: x, Y: y }).collect();
+        let brush = self.brush(argb);
         unsafe {
-            let mut brush: *mut GpSolidFill = std::ptr::null_mut();
-            GdipCreateSolidFill(argb, &mut brush);
             GdipFillPolygon(self.g, brush as *mut GpBrush, v.as_ptr(), v.len() as i32,
                             FillModeAlternate);
-            GdipDeleteBrush(brush as *mut GpBrush);
         }
     }
 
@@ -534,7 +536,6 @@ impl Canvas {
             let path = round_path4(x, y, w, h, tl, tr, br, bl);
             let b = self.brush(argb);
             GdipFillPath(self.g, b as *mut _, path);
-            GdipDeleteBrush(b as *mut _);
             GdipDeletePath(path);
         }
     }
@@ -664,6 +665,7 @@ impl Drop for Canvas {
                 if seen.insert(f as usize) { GdipDeleteFont(f); }
             }
             for (_, f) in self.fmts.drain() { GdipDeleteStringFormat(f); }
+            for (_, b) in self.brushes.drain() { if !b.is_null() { GdipDeleteBrush(b as *mut GpBrush); } }
             if !self.family.is_null() { GdipDeleteFontFamily(self.family); }
             GdipDeleteGraphics(self.g);
             GdipDisposeImage(self.bmp as *mut _);
