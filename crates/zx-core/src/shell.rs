@@ -153,6 +153,24 @@ pub fn notify_shell() {
     }
 }
 
+/// 动词父键的位置：`SystemFileAssociations\<ext>\shell\<key>`。
+///
+/// **不能**挂在 `Software\Classes\.<ext>\shell\` 下：只要这个扩展名有 ProgID
+/// （最常见的情况——`.png` 被 WPS 抢成 `WPS.PIC.png`、`.exe` 是 `exefile`、
+/// `.jpg` 是 `jpegfile`），外壳就只读 ProgID 下的动词，扩展名键上那棵树被整棵忽略。
+/// 这时注册表看着完全正确、`installed()` 也返回 true，右键里就是不出现。
+///
+/// `SystemFileAssociations` 是官方给"按扩展名补充动词"的位置，不受 ProgID 与
+/// `Explorer\FileExts\<ext>\UserChoice` 影响。
+fn verb_parent(spec: &VerbSpec, ext: &str) -> String {
+    format!("Software\\Classes\\SystemFileAssociations\\.{ext}\\shell\\{}", spec.key)
+}
+
+/// 0.0.1 及更早把动词写在扩展名键上，装/卸时一并清掉（迁移）。
+fn legacy_parent(spec: &VerbSpec, ext: &str) -> String {
+    format!("Software\\Classes\\.{ext}\\shell\\{}", spec.key)
+}
+
 /// 装/刷新菜单。返回装了几个扩展名。
 pub fn install(spec: &VerbSpec) -> Result<usize, String> {
     let exe = exe_path();
@@ -173,10 +191,12 @@ pub fn install(spec: &VerbSpec) -> Result<usize, String> {
     // 2) 每个扩展名一个父键，指向公共子菜单
     let mut n = 0;
     for ext in spec.exts {
-        let sub = format!("Software\\Classes\\.{ext}\\shell\\{}", spec.key);
+        let sub = verb_parent(spec, ext);
         // 先整棵删掉：老版本把菜单文案写进了父键默认值，那条记录会让外壳
         // 认为"这个动词没有 command"，整项直接被丢掉。重建才能保证默认值为空。
         delete_tree(&sub)?;
+        // 迁移：把挂在扩展名键上的旧动词删掉，否则同一个菜单可能出现两次
+        let _ = delete_tree(&legacy_parent(spec, ext));
         set_sz(&sub, Some("MUIVerb"), spec.label)?;
         set_sz(&sub, Some("Icon"), &format!("{exe},0"))?;
         // 空串 + ExtendedSubCommandsKey = 原生级联菜单
@@ -195,8 +215,10 @@ pub fn install(spec: &VerbSpec) -> Result<usize, String> {
 pub fn remove(spec: &VerbSpec) -> Result<(), String> {
     let mut first_err = None;
     for ext in spec.exts {
-        if let Err(e) = delete_tree(&format!("Software\\Classes\\.{ext}\\shell\\{}", spec.key)) {
-            first_err.get_or_insert(e);
+        for sub in [verb_parent(spec, ext), legacy_parent(spec, ext)] {
+            if let Err(e) = delete_tree(&sub) {
+                first_err.get_or_insert(e);
+            }
         }
     }
     if let Err(e) = delete_tree(spec.targets_key) {
@@ -225,7 +247,7 @@ pub fn registered_exe(spec: &VerbSpec) -> Option<String> {
 /// 且子菜单里至少有一条写了 command。只看 `key_exists` 会骗人——
 /// 老版本把文案写进父键默认值，键在、菜单却不出现。
 pub fn installed(spec: &VerbSpec) -> bool {
-    let parent = format!("Software\\Classes\\.{}\\shell\\{}", spec.probe_ext, spec.key);
+    let parent = verb_parent(spec, spec.probe_ext);
     if !key_exists(&parent) {
         return false;
     }
@@ -240,4 +262,42 @@ pub fn installed(spec: &VerbSpec) -> bool {
             .map(|v| !v.trim().is_empty())
             .unwrap_or(false)
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn no_items() -> Vec<(&'static str, String, String)> {
+        Vec::new()
+    }
+
+    const SPEC: VerbSpec = VerbSpec {
+        key: "ZhuxiaTest",
+        label: "测试动词",
+        targets_key: "ZhuxiaTest.Targets",
+        cli_flag: "--test",
+        probe_ext: "png",
+        exts: &["png", "exe"],
+        items: no_items,
+    };
+
+    /// 动词必须挂在 `SystemFileAssociations` 下。
+    ///
+    /// 这条是回归护栏：早先挂在 `Software\Classes\.<ext>\shell\` 上，只要扩展名有 ProgID
+    /// （`.png` → WPS.PIC.png、`.exe` → exefile），外壳就只读 ProgID 的动词，
+    /// 整棵扩展名键被忽略——注册表全对、`installed()` 也 true，右键里就是不出现。
+    #[test]
+    fn verb_lives_under_system_file_associations() {
+        assert_eq!(
+            verb_parent(&SPEC, "png"),
+            r"Software\Classes\SystemFileAssociations\.png\shell\ZhuxiaTest"
+        );
+        assert_eq!(
+            verb_parent(&SPEC, "exe"),
+            r"Software\Classes\SystemFileAssociations\.exe\shell\ZhuxiaTest"
+        );
+        // 旧位置只用于卸载迁移，不能再往回写
+        assert_eq!(legacy_parent(&SPEC, "png"), r"Software\Classes\.png\shell\ZhuxiaTest");
+    }
 }

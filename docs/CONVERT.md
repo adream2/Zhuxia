@@ -15,8 +15,11 @@
 - 方向：读取 EXIF Orientation 并在解码后旋转/翻转。
 - 透明：目标格式不支持 alpha 时按背景色压平。
 - 编码：GDI+ 写 JPG/PNG/GIF/BMP/TIFF；WebP 走 `libwebp`；ICO 按 16/32/48/256 多尺寸写入。
-- 菜单：注册表写入资源管理器右键菜单（`HKCU\Software\Classes\.<ext>\shell\ZhuxiaImgConv`，
+- 菜单：注册表写入资源管理器右键菜单（`HKCU\Software\Classes\SystemFileAssociations\.<ext>\shell\ZhuxiaImgConv`，
   `ExtendedSubCommandsKey` 级联到公共子菜单）；模块禁用时卸载。
+  **不能挂在 `Software\Classes\.<ext>\shell\` 下**：只要扩展名有 ProgID
+  （`.png` 被 WPS 抢成 `WPS.PIC.png`、`.exe` 是 `exefile`），外壳只读 ProgID 的动词，
+  扩展名键上那棵树被整棵忽略——注册表全对、`installed()` 也 true，右键里就是不出现。
   **父键的默认值必须不设**——设了会被外壳判成"没有 command"，键在、菜单却不出现；
 - 队列：右键传入的路径去重后串行处理，避免一次选中大量文件时并发爆内存。
 
