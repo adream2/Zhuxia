@@ -90,13 +90,18 @@ const apatch = (obj) => save("appicon", obj);
 /* ---------- 渲染 ---------- */
 const PAGES = { general: pageGeneral, appearance: pageAppearance, sampling: pageSampling, traffic: pageTraffic, clipboard: pageClipboard, capture: pageCapture, record: pageRecord, gesture: pageGesture, imgconv: pageImgconv, appicon: pageAppicon, imgbed: pageImgbed, devtools: pageDevtools, about: pageAbout };
 
+// 上一次真正画出来的是哪一页：用来区分"同一页里重画"（要保住滚动位置）和
+// "切到了另一页"（必须回到顶部——否则在长页面滚到一半，切过去也是半中腰）
+let renderedPage = null;
+
 function render() {
   if (!S) return;
   document.querySelectorAll("#nav button").forEach((b) => {
     b.classList.toggle("active", b.dataset.page === page);
   });
   const main = document.getElementById("page");
-  const scroll = main.scrollTop;
+  const samePage = renderedPage === page;
+  const scroll = samePage ? main.scrollTop : 0;
   try {
     main.replaceChildren(PAGES[page]());
   } catch (e) {
@@ -104,6 +109,7 @@ function render() {
     main.replaceChildren(h("div", "card", "页面渲染出错：" + (e && e.message ? e.message : e)));
   }
   main.scrollTop = scroll;
+  renderedPage = page;
   const foot = document.getElementById("nav-foot");
   foot.innerHTML = "";
   foot.append(h("div", "", `v${S.meta.version}`));
