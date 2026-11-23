@@ -21,7 +21,8 @@ libloading = "0.8"
 opt-level = "z"
 lto = true
 codegen-units = 1
-panic = "abort"
+# 不要加回 panic = "abort"：窗口过程/钩子靠 zx_ui::guard_proc 里的 catch_unwind 兜底，
+# abort 会让兜底彻底失效（回调里任何 panic 直接杀进程）。代价是体积 +4.4MB（9.0 → 13.4）。
 strip = true
 
 # 逐像素的热循环不能按体积优化：缩放一步 1280×720 在 opt-level=z 下要 19ms，

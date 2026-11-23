@@ -286,6 +286,12 @@ fn is_empty() -> bool {
 
 
 unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+    // panic 屏障：回调里 panic 会穿过 extern "system" 边界直接终止进程
+    zx_ui::guard_proc!(DefWindowProcW(hwnd, msg, wparam, lparam), { wndproc_inner(hwnd, msg, wparam, lparam) })
+}
+
+unsafe fn wndproc_inner(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+
     match msg {
         WM_TRAIL | WM_HINT => {
             REDRAW_PENDING.store(false, Ordering::SeqCst);

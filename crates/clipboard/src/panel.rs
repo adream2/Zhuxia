@@ -1746,6 +1746,12 @@ fn register_hover_class() {
 }
 
 unsafe extern "system" fn hover_proc(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -> LRESULT {
+    // panic 屏障：回调里 panic 会穿过 extern "system" 边界直接终止进程
+    zx_ui::guard_proc!(DefWindowProcW(hwnd, msg, w, l), { hover_proc_inner(hwnd, msg, w, l) })
+}
+
+unsafe fn hover_proc_inner(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -> LRESULT {
+
     DefWindowProcW(hwnd, msg, w, l)
 }
 
@@ -1782,6 +1788,12 @@ fn register_dispatcher() {
 }
 
 unsafe extern "system" fn dispatch_proc(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -> LRESULT {
+    // panic 屏障：回调里 panic 会穿过 extern "system" 边界直接终止进程
+    zx_ui::guard_proc!(DefWindowProcW(hwnd, msg, w, l), { dispatch_proc_inner(hwnd, msg, w, l) })
+}
+
+unsafe fn dispatch_proc_inner(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -> LRESULT {
+
     match msg {
         WM_CLIP_SHOW => {
             show_now(w.0 != 0);
@@ -2056,6 +2068,12 @@ fn panel_of(hwnd: HWND) -> Option<&'static mut Panel> {
 }
 
 unsafe extern "system" fn panel_proc(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -> LRESULT {
+    // panic 屏障：回调里 panic 会穿过 extern "system" 边界直接终止进程
+    zx_ui::guard_proc!(DefWindowProcW(hwnd, msg, w, l), { panel_proc_inner(hwnd, msg, w, l) })
+}
+
+unsafe fn panel_proc_inner(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -> LRESULT {
+
     match msg {
         WM_PAINT => {
             // 必须 BeginPaint/EndPaint：不校验更新区域会无限重绘。
@@ -2684,6 +2702,12 @@ fn form_inner(title: &str, hint: &str, fields: &[(&str, &str, bool)]) -> Option<
 }
 
 unsafe extern "system" fn form_proc(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -> LRESULT {
+    // panic 屏障：回调里 panic 会穿过 extern "system" 边界直接终止进程
+    zx_ui::guard_proc!(DefWindowProcW(hwnd, msg, w, l), { form_proc_inner(hwnd, msg, w, l) })
+}
+
+unsafe fn form_proc_inner(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -> LRESULT {
+
     let ptr = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *mut Form;
     match msg {
         WM_COMMAND => {
@@ -2736,6 +2760,12 @@ unsafe extern "system" fn form_proc(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) 
 static FORM_EDIT_OLD: std::sync::atomic::AtomicIsize = std::sync::atomic::AtomicIsize::new(0);
 
 unsafe extern "system" fn form_edit_proc(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -> LRESULT {
+    // panic 屏障：回调里 panic 会穿过 extern "system" 边界直接终止进程
+    zx_ui::guard_proc!(DefWindowProcW(hwnd, msg, w, l), { form_edit_proc_inner(hwnd, msg, w, l) })
+}
+
+unsafe fn form_edit_proc_inner(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -> LRESULT {
+
     let old = FORM_EDIT_OLD.load(std::sync::atomic::Ordering::SeqCst);
     if old == 0 {
         return DefWindowProcW(hwnd, msg, w, l);

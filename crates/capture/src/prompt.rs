@@ -120,6 +120,12 @@ pub fn text(title: &str, initial: &str, near: POINT) -> Option<String> {
 }
 
 unsafe extern "system" fn edit_proc(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -> LRESULT {
+    // panic 屏障：回调里 panic 会穿过 extern "system" 边界直接终止进程
+    zx_ui::guard_proc!(DefWindowProcW(hwnd, msg, w, l), { edit_proc_inner(hwnd, msg, w, l) })
+}
+
+unsafe fn edit_proc_inner(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -> LRESULT {
+
     if msg == WM_KEYDOWN {
         let key = w.0 as u16;
         if key == 0x0D {
@@ -147,6 +153,12 @@ unsafe extern "system" fn edit_proc(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) 
 }
 
 unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -> LRESULT {
+    // panic 屏障：回调里 panic 会穿过 extern "system" 边界直接终止进程
+    zx_ui::guard_proc!(DefWindowProcW(hwnd, msg, w, l), { wndproc_inner(hwnd, msg, w, l) })
+}
+
+unsafe fn wndproc_inner(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -> LRESULT {
+
     match msg {
         WM_ACTIVATE => {
             if (w.0 & 0xFFFF) == 0 {

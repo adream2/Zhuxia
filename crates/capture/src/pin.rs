@@ -167,6 +167,12 @@ impl Pin {
 }
 
 unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -> LRESULT {
+    // panic 屏障：回调里 panic 会穿过 extern "system" 边界直接终止进程
+    zx_ui::guard_proc!(DefWindowProcW(hwnd, msg, w, l), { wndproc_inner(hwnd, msg, w, l) })
+}
+
+unsafe fn wndproc_inner(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -> LRESULT {
+
     match msg {
         WM_MOUSEMOVE => {
             let mut map = pins().lock().unwrap_or_else(|p| p.into_inner());

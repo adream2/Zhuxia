@@ -1845,6 +1845,12 @@ fn rgb_ref(argb: u32) -> COLORREF {
 }
 
 unsafe extern "system" fn text_wndproc(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -> LRESULT {
+    // panic 屏障：回调里 panic 会穿过 extern "system" 边界直接终止进程
+    zx_ui::guard_proc!(DefWindowProcW(hwnd, msg, w, l), { text_wndproc_inner(hwnd, msg, w, l) })
+}
+
+unsafe fn text_wndproc_inner(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -> LRESULT {
+
     match msg {
         WM_ACTIVATE => {
             if (w.0 & 0xFFFF) == 0 {
@@ -1869,6 +1875,12 @@ unsafe extern "system" fn text_wndproc(hwnd: HWND, msg: u32, w: WPARAM, l: LPARA
 
 /// EDIT 的子类化：回车提交、Esc 取消。EDIT 本身不发这两个通知，只能挂 WndProc。
 unsafe extern "system" fn edit_proc(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -> LRESULT {
+    // panic 屏障：回调里 panic 会穿过 extern "system" 边界直接终止进程
+    zx_ui::guard_proc!(DefWindowProcW(hwnd, msg, w, l), { edit_proc_inner(hwnd, msg, w, l) })
+}
+
+unsafe fn edit_proc_inner(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -> LRESULT {
+
     if msg == WM_KEYDOWN {
         let owner = TEXT_OWNER.load(Ordering::SeqCst);
         let target = if owner != 0 { HWND(owner as *mut _) } else { GetParent(hwnd).unwrap_or_default() };
@@ -2486,6 +2498,12 @@ fn anno_cursor(h: AHdl) -> PCWSTR {
 }
 
 unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -> LRESULT {
+    // panic 屏障：回调里 panic 会穿过 extern "system" 边界直接终止进程
+    zx_ui::guard_proc!(DefWindowProcW(hwnd, msg, w, l), { wndproc_inner(hwnd, msg, w, l) })
+}
+
+unsafe fn wndproc_inner(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -> LRESULT {
+
     match msg {
         WM_MOUSEMOVE => {
             with_ov(|o| o.on_move(l));

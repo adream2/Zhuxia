@@ -778,6 +778,12 @@ fn fit_px(c: &mut Canvas, s: &str, avail: f32, px: f32, min_ratio: f32) -> f32 {
 fn or_dash(s: &str) -> String { if s.is_empty() { "—".into() } else { s.into() } }
 
 unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -> LRESULT {
+    // panic 屏障：回调里 panic 会穿过 extern "system" 边界直接终止进程
+    zx_ui::guard_proc!(DefWindowProcW(hwnd, msg, w, l), { wndproc_inner(hwnd, msg, w, l) })
+}
+
+unsafe fn wndproc_inner(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -> LRESULT {
+
     match msg {
         WM_NCCREATE => LRESULT(1),
         WM_SNAPSHOT => {

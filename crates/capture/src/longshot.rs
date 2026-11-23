@@ -476,6 +476,12 @@ fn button_rect(i: usize) -> (f32, f32, f32, f32) {
 }
 
 unsafe extern "system" fn bar_proc(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -> LRESULT {
+    // panic 屏障：回调里 panic 会穿过 extern "system" 边界直接终止进程
+    zx_ui::guard_proc!(DefWindowProcW(hwnd, msg, w, l), { bar_proc_inner(hwnd, msg, w, l) })
+}
+
+unsafe fn bar_proc_inner(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -> LRESULT {
+
     match msg {
         WM_TIMER => {
             if w.0 == 2 {

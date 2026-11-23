@@ -147,6 +147,12 @@ fn tap_ctrl() {
 }
 
 unsafe extern "system" fn hook_proc(code: i32, w: WPARAM, l: LPARAM) -> LRESULT {
+    // panic 屏障：回调里 panic 会穿过 extern "system" 边界直接终止进程
+    zx_ui::guard_proc!(CallNextHookEx(None, code, w, l), { hook_proc_inner(code, w, l) })
+}
+
+unsafe fn hook_proc_inner(code: i32, w: WPARAM, l: LPARAM) -> LRESULT {
+
     if code < 0 {
         return CallNextHookEx(None, code, w, l);
     }
