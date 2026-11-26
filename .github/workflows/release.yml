@@ -317,7 +317,37 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      # 下面那步要删掉本 run 里残留的 github-pages 产物
+      actions: write
     steps:
+      # `upload-pages-artifact` 没有 overwrite 参数：同一个 run 里重跑一次，
+      # 就会存在第二个 `github-pages`，而 `deploy-pages` 见到重名直接报
+      # 「Multiple artifacts named "github-pages"」——它没法猜该部署哪一份。
+      # 发版流程一旦因为网络抖动要重跑，就会被这个卡死，所以上传前先清干净。
+      - name: 清掉本 run 里残留的 github-pages
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -uo pipefail
+          api="repos/${GITHUB_REPOSITORY}/actions"
+          ids=$(gh api "${api}/runs/${GITHUB_RUN_ID}/artifacts?per_page=100" \
+                  --jq '.artifacts[] | select(.name=="github-pages") | .id' || true)
+          if [[ -z "$ids" ]]; then
+            echo "没有残留的 github-pages 产物"
+            exit 0
+          fi
+          for id in $ids; do
+            echo "删除残留产物 id=$id"
+            gh api -X DELETE "${api}/artifacts/${id}" || echo "::warning::删除 $id 失败（可能已被别处删掉）"
+          done
+          left=$(gh api "${api}/runs/${GITHUB_RUN_ID}/artifacts?per_page=100" \
+                  --jq '[.artifacts[] | select(.name=="github-pages")] | length')
+          if [[ "$left" != "0" ]]; then
+            echo "::error::仍残留 $left 个 github-pages 产物；不清理掉，部署必然因为重名失败"
+            exit 1
+          fi
+
       - uses: actions/checkout@v4
         with:
           # 更新日志按标签区间汇总，需要完整历史
