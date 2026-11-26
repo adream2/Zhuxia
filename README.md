@@ -14,9 +14,9 @@ Windows 上的常驻小工具集合：**一个后台进程**提供系统监视�
 
 八个功能模块各自独立开关：关掉的模块不占线程、不占钩子，也不写数据。
 
-<img src="site/shots/capture.png" alt="截图工具的选区与标注界面" width="720">
+<img src="https://zhuxia.ztsite.com/shots/capture.png" alt="截图工具的选区与标注界面" width="720">
 
-<img src="site/shots/taskbar.png" alt="任务栏监视条：CPU、内存、磁盘、GPU 与上下行网速" width="440">
+<img src="https://zhuxia.ztsite.com/shots/taskbar.png" alt="任务栏监视条：CPU、内存、磁盘、GPU 与上下行网速" width="440">
 
 更多界面见[官网](https://zhuxia.ztsite.com/#shots)。
 
@@ -80,6 +80,7 @@ Windows 上的常驻小工具集合：**一个后台进程**提供系统监视�
 
 ## 文档
 
+- 文档目录与收录范围：`docs/README.md`（审计报告、设计稿、踩坑记录属内部资料，不入库）。
 - 技术架构：`docs/ARCHITECTURE.md`；各模块说明：`docs/` 下对应文件。
 - 宣传页与部署流程：`site/README.md`（页面由发布流程自动重建并部署）。
 - 第三方组件与许可证声明：`THIRD_PARTY_NOTICES.md`。
@@ -98,8 +99,8 @@ Windows 上的常驻小工具集合：**一个后台进程**提供系统监视�
 
 <table>
   <tr>
-    <td align="center"><img src="site/pay/wechat.png" width="180" alt="微信支付收款码"><br><sub>微信支付</sub></td>
-    <td align="center"><img src="site/pay/alipay.png" width="180" alt="支付宝收款码"><br><sub>支付宝</sub></td>
+    <td align="center"><img src="https://zhuxia.ztsite.com/pay/wechat.png" width="180" alt="微信支付收款码"><br><sub>微信支付</sub></td>
+    <td align="center"><img src="https://zhuxia.ztsite.com/pay/alipay.png" width="180" alt="支付宝收款码"><br><sub>支付宝</sub></td>
   </tr>
 </table>
 

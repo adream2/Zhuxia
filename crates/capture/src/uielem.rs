@@ -1,6 +1,6 @@
 //! UI 元素识别：截图场景下的元素定位、分类与文本校正。
 //!
-//! 设计取舍（详见 `docs/UIELEM.md`）：
+//! 设计取舍：
 //!
 //! 1. **UIA 为主，视觉为辅**。标准 Windows 控件（Win32 / WinForms / WPF / UWP /
 //!    Electron / 浏览器 / Office）都能从 `IUIAutomation` 拿到 ControlType、Name 和

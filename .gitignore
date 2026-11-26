@@ -39,3 +39,25 @@ __pycache__/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# ---- 文档收录范围（见 docs/README.md）----
+# docs/ 只放"面向外部读者、描述已发布行为"的文档。新增文件默认不入库：
+# 白名单是**失败关闭**的——忘了登记就提交不上去（git add 会直接报 ignored），
+# 而不是悄悄地混进仓库。登记需要改两处：这里的白名单 + docs/README.md 的清单。
+/docs/*
+!/docs/README.md
+!/docs/ARCHITECTURE.md
+!/docs/APPICON.md
+!/docs/CAPTURE.md
+!/docs/CLIPBOARD.md
+!/docs/CONVERT.md
+!/docs/DEVTOOLS.md
+!/docs/GESTURE.md
+!/docs/IMGBED.md
+!/docs/RECORD.md
+!/docs/articles/
+!/docs/articles/*.md
+
+# 内部资料：审计报告、设计稿、踩坑与实测记录。
+# 只给本地开发参考，不随仓库分发；文件仍留在磁盘上（路径 internal/）。
+/internal/
