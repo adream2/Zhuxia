@@ -230,21 +230,19 @@ CI 里 `configure-pages` 取不到配置时会给出这些值，照抄会把整�
 | `taskbar.png` | 任务栏监视条（2× 放大） | 464×112 |
 | `appearance.png` | 设置面板 · 外观设置页 | 990×695 |
 | `about.png` | 设置面板 · 关于与许可页 | 990×695 |
-| `capture.png` | 设置面板 · 截图工具页（仅作首屏兜底，不在图集里） | 990×695 |
 
 前五张是"用起来"的实拍，排序也按这个优先级——产品页此前四张里三张是设置页，
 缺的正是这些画面。
 
 **缺图不拦构建**：`render_shots()` 跳过没有文件的槽位并打印提示，可以先拍一张上一张。
 
-**首屏自动升级**：`HERO_SHOTS` 按 `selection.png` → `capture.png` 取第一张存在的。
+**首屏自动升级**：`HERO_SHOTS` 按 `selection.png` → `annotate.png` 取第一张存在的。
 拍好 `selection` 丢进去，首屏大图与结构化数据的 `screenshot` 都会自动换掉，不用改代码。
 
-### 三张设置页的拍法
+### 设置页与任务栏条的拍法
 
 ```bash
 # 先确保驻匣在运行（--settings 依赖常驻进程存活），打开后 5 秒内截图并裁到窗口区域
-zhuxia.exe --settings capture     # → capture.png
 zhuxia.exe --settings appearance  # → appearance.png
 zhuxia.exe --settings about       # → about.png
 
@@ -260,13 +258,13 @@ zhuxia.exe --settings about       # → about.png
 拿到图按上表文件名丢进 `site/shots/`。规格：宽 1000–1280，窗口裁干净，
 不加外框和阴影（页面自己会套）。
 
-首屏按 `HERO_SHOTS` 的顺序取**第一张存在**的：`selection → annotate → capture`。
+首屏按 `HERO_SHOTS` 的顺序取**第一张存在**的：`selection → annotate`。
 `selection` 里已经带了元素识别气泡（悬停控件→复制文本/存图标），所以早先那张名为
 `uielem.png` 的局部特写被删掉了——同一张图看两遍没有意义。
 
 ### 隐私红线（每次重截都要过一遍）
 
-- 不要出现 `C:\Users\<用户名>\…` 这类路径 —— `capture.png` 现在就带着，应重截。
+- 不要出现本机用户目录路径（保存目录、路径输入框里最容易露）。
 - 不要出现显示器型号（`appearance.png` 里的 `P27QBD-RG`）。
 - 剪贴板、图床、OCR 三张最容易翻车：历史条目里可能有真实文件名、仓库名、bucket 名、
   token、聊天内容。发之前逐张放大看一遍。
