@@ -285,10 +285,34 @@ def png_size(path: Path) -> tuple[int, int]:
     return struct.unpack(">II", head[16:24])
 
 
+def shot_files() -> list[str]:
+    """实际存在、会被渲染进页面的截图（按 content.SHOTS 的顺序）。"""
+    return [k for k, _, _ in content.SHOTS if (SITE / "shots" / f"{k}.png").is_file()]
+
+
+def hero_pick() -> tuple[str, str]:
+    """首屏用哪张：按 HERO_SHOTS 的顺序取第一张存在的。
+
+    这样"先拍出一张能用的"就能立刻换掉首屏，不必等整套配图凑齐。
+    """
+    for key, alt in content.HERO_SHOTS:
+        if (SITE / "shots" / f"{key}.png").is_file():
+            return key, alt
+    raise SystemExit(
+        "首屏截图缺失：site/shots/ 下至少要有 "
+        + " 或 ".join(f"{k}.png" for k, _ in content.HERO_SHOTS)
+    )
+
+
 def render_shots() -> str:
     out = []
     for key, title, desc in content.SHOTS:
-        w, h = png_size(SITE / "shots" / f"{key}.png")
+        path = SITE / "shots" / f"{key}.png"
+        if not path.is_file():
+            # 缺图不拦构建：截图是手工素材，需求先进清单，拍到哪张上哪张
+            print(f"  · 截图缺失，跳过：shots/{key}.png（{title}）")
+            continue
+        w, h = png_size(path)
         # 任务栏条带只有 176×56，套一个浅色底衬托，不然在深色卡片里只剩一条细线
         if key == "taskbar":
             inner = (
@@ -310,7 +334,7 @@ def render_shots() -> str:
 
 def render_hero() -> str:
     """首屏就放一张真机截图，不再叠装饰条——叠上去会盖住窗口内容。"""
-    key, alt = content.HERO_SHOT
+    key, alt = hero_pick()
     w, h = png_size(SITE / "shots" / f"{key}.png")
     return (
         f'<div class="hero-art"><img class="win" src="shots/{key}.png" '
@@ -395,6 +419,16 @@ def render_downloads(rel: list[dict], slug: str, version: str) -> str:
     return "".join(cards)
 
 
+def render_mirror() -> str:
+    """下载区下面的网盘分流。放在两张正式卡片之外，视觉上明确是"备选"。"""
+    m = content.MIRROR
+    return (
+        f'<p class="dl-mirror">国内访问 GitHub 慢？也可以用 '
+        f'<a href="{esc(m["url"])}" target="_blank" rel="noopener">{esc(m["label"])}</a> 下载——'
+        f'{esc(m["note"])}</p>'
+    )
+
+
 def render_changelog(rel: list[dict], version: str) -> str:
     if not rel:
         commits = head_commits()
@@ -453,7 +487,7 @@ def render_jsonld(version: str, site: str, slug: str, rel: list[dict]) -> str:
         "url": site,
         "downloadUrl": download_url(target, slug),
         "installUrl": f"{repo}/releases",
-        "screenshot": f"{site}shots/capture.png",
+        "screenshot": f"{site}shots/{hero_pick()[0]}.png",
         "image": f"{site}assets/og.png",
         "featureList": [f[1] for f in content.FEATURES],
         "offers": {
@@ -720,6 +754,7 @@ def main() -> int:
         "HIGHLIGHTS": render_highlights(),
         "FAQ": render_faq(),
         "DOWNLOADS": render_downloads(releases, slug, version),
+        "MIRROR": render_mirror(),
         "CHANGELOG": render_changelog(releases, version),
         "BUILT_AT": datetime.now(timezone.utc).astimezone().strftime("%Y-%m-%d %H:%M"),
     }
@@ -769,9 +804,12 @@ REQUIRED = [
 
 def verify(out: Path, site: str = "") -> None:
     domain = custom_domain(site)
-    need = REQUIRED + [
-        f"shots/{name}.png" for name in ("capture", "appearance", "about", "taskbar")
-    ]
+    # 只校验真正会被渲染的截图：清单里那些还没拍的不算缺件，
+    # 但首屏那张必须有（否则页面顶部是空的）。
+    need = REQUIRED + [f"shots/{k}.png" for k in shot_files()]
+    hero_file = f"shots/{hero_pick()[0]}.png"
+    if hero_file not in need:
+        need.append(hero_file)
     if domain:
         need.append("CNAME")
     missing = [f for f in need if not (out / f).is_file()]

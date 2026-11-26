@@ -374,6 +374,15 @@ h1 em {
 /* ---------------------------------------------------------------- 下载 */
 
 .downloads { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+/* 网盘分流：明确比上面两张卡片低一级，不抢正式版的视觉权重 */
+.dl-mirror {
+  margin: 14px 0 0;
+  color: var(--dim);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.dl-mirror a { color: var(--accent); text-decoration: none; }
+.dl-mirror a:hover { text-decoration: underline; }
 
 .dl {
   position: relative;
