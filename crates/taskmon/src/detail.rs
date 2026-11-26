@@ -32,6 +32,8 @@ const TAB_GAP: f32 = 6.0;
 const TAB_Y: f32 = 214.0;
 
 thread_local! {
+    /// 借用计数，见 `zx_core::borrow`。
+    static BORROW: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
     static MAP: RefCell<HashMap<isize, *mut Detail>> = RefCell::new(HashMap::new());
     static ICONS: RefCell<HashMap<String, IconSlot>> = RefCell::new(HashMap::new());
 }
@@ -787,7 +789,7 @@ unsafe fn wndproc_inner(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -> LRESULT {
     match msg {
         WM_NCCREATE => LRESULT(1),
         WM_SNAPSHOT => {
-            if let Some(d) = get(hwnd) {
+            if let Some(mut d) = get(hwnd) {
                 d.snapshot = crate::snapshot::latest();
                 // 设备清单要等采样线程真出过一帧才有；在那之前一直挂起
                 if d.tab_pending {
@@ -805,7 +807,7 @@ unsafe fn wndproc_inner(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -> LRESULT {
         }
         WM_ACTIVATE => {
             let active = (w.0 & 0xFFFF) != 0;
-            if let Some(d) = get(hwnd) {
+            if let Some(mut d) = get(hwnd) {
                 if active {
                     d.activated = true;
                 } else if d.activated && !d.pinned {
@@ -817,7 +819,7 @@ unsafe fn wndproc_inner(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -> LRESULT {
             LRESULT(0)
         }
         WM_MOUSEMOVE => {
-            if let Some(d) = get(hwnd) {
+            if let Some(mut d) = get(hwnd) {
                 let x = (l.0 & 0xFFFF) as i16 as i32;
                 let y = ((l.0 >> 16) & 0xFFFF) as i16 as i32;
                 let k = d.dpi as f32 / 96.0;
@@ -829,7 +831,7 @@ unsafe fn wndproc_inner(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -> LRESULT {
             LRESULT(0)
         }
         WM_LBUTTONUP => {
-            if let Some(d) = get(hwnd) {
+            if let Some(mut d) = get(hwnd) {
                 let x = (l.0 & 0xFFFF) as i16 as i32;
                 let y = ((l.0 >> 16) & 0xFFFF) as i16 as i32;
                 let k = d.dpi as f32 / 96.0;
@@ -917,8 +919,16 @@ fn in_rect(x: i32, y: i32, r: (f32, f32, f32, f32)) -> bool {
     (x as f32) >= r.0 && (x as f32) <= r.0 + r.2 && (y as f32) >= r.1 && (y as f32) <= r.1 + r.3
 }
 
-fn get(hwnd: HWND) -> Option<&'static mut Detail> {
-    MAP.with(|m| m.borrow().get(&(hwnd.0 as isize)).map(|p| unsafe { &mut **p }))
+/// 取详情页状态。
+///
+/// 返回借用守卫而不是 `&'static mut`：同一个函数里嵌套取两次会产生两个 `&mut`，
+/// debug 构建由 `borrow::Ref` 直接断言。手里已经有 `self` 的时候就用 `self`。
+fn get(hwnd: HWND) -> Option<zx_core::borrow::Ref<Detail>> {
+    MAP.with(|m| {
+        m.borrow()
+            .get(&(hwnd.0 as isize))
+            .map(|p| unsafe { zx_core::borrow::Ref::new(*p, &BORROW, "任务栏详情页") })
+    })
 }
 
 pub fn register() {
@@ -983,5 +993,76 @@ fn short_gpu(name: &str) -> String {
         format!("{t}…")
     } else {
         s.to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // 详情面板里的设备行：名字/容量/类型都是给用户看的字符串，
+    // 拼错了不会报错，只会让人看到 " / 0 B" 这种半截东西。
+
+    fn disk(letters: &str, kind: u8, style: u8, fs: &str) -> crate::snapshot::DiskInfo {
+        crate::snapshot::DiskInfo {
+            index: 0,
+            letters: letters.into(),
+            kind,
+            part_style: style,
+            fs: fs.into(),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn disk_letters_takes_the_first_one() {
+        assert_eq!(disk_letters(&disk("C: D: E:", 1, 2, "NTFS")), "C:");
+        assert_eq!(disk_letters(&disk("  F: ", 1, 2, "NTFS")), "F:");
+    }
+
+    #[test]
+    fn disk_letters_falls_back_to_index_when_unmounted() {
+        // 没盘符（未分配 / 仅挂载点）时不能显示空字符串，标签会变成 "   · SSD"
+        let mut d = disk("", 1, 2, "");
+        d.index = 2;
+        assert_eq!(disk_letters(&d), "磁盘 3");
+    }
+
+    #[test]
+    fn mem_pair_hides_total_when_driver_does_not_report_it() {
+        // GB 量级走两位小数（fmt::bytes 的约定），这里对齐它而不是自己另立一套
+        assert_eq!(mem_pair(2 * 1024 * 1024 * 1024, 8 * 1024 * 1024 * 1024), "2.00 GB / 8.00 GB");
+        // 总量 0 = 驱动不报，只显示已用，不要显示 "2.00 GB / 0 B"
+        assert_eq!(mem_pair(2 * 1024 * 1024 * 1024, 0), "2.00 GB");
+    }
+
+    #[test]
+    fn disk_kind_line_skips_unknown_parts() {
+        assert_eq!(disk_kind_line(&disk("C:", 1, 2, "NTFS")), "SSD · GPT · NTFS");
+        assert_eq!(disk_kind_line(&disk("C:", 2, 1, "exFAT")), "HDD · MBR · exFAT");
+        // 分区表和文件系统都不知道时只留类型，不要留 "SSD ·  · "
+        assert_eq!(disk_kind_line(&disk("C:", 1, 0, "")), "SSD");
+        assert_eq!(disk_kind_line(&disk("C:", 0, 0, "")), "未知");
+    }
+
+    #[test]
+    fn short_gpu_strips_vendor_prefix() {
+        assert_eq!(short_gpu("NVIDIA GeForce RTX 4090"), "RTX 4090");
+        assert_eq!(short_gpu("AMD Radeon RX 7900 XTX"), "RX 7900 XTX");
+        assert_eq!(short_gpu("Intel(R) UHD Graphics 630"), "UHD Graphic…");
+    }
+
+    #[test]
+    fn short_gpu_truncates_by_chars_not_bytes() {
+        // 中文名按字节截会切出半个字符（直接 panic），必须按字符
+        let s = short_gpu("这是六个中文字符的显卡名字");
+        assert_eq!(s.chars().count(), 12, "11 个字符 + 省略号");
+        assert!(s.ends_with('…'));
+    }
+
+    #[test]
+    fn or_dash_only_for_empty() {
+        assert_eq!(or_dash(""), "—");
+        assert_eq!(or_dash("0"), "0");
     }
 }

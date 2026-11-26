@@ -49,6 +49,7 @@
       <span>驻匣</span><span class="en">ZHU XIA</span>
     </a>
     <nav aria-label="主导航">
+      <a href="#demos">演示</a>
       <a href="#features">功能</a>
       <a href="#shots">界面</a>
       <a href="#download">下载</a>
@@ -74,6 +75,477 @@
         <ul class="stats">{{STATS}}</ul>
       </div>
       {{HERO}}
+    </div>
+  </section>
+
+  <section class="section" id="demos" aria-labelledby="demos-h">
+    <div class="wrap">
+      <h2 id="demos-h">先动手，再决定要不要装</h2>
+      <p class="lead">下面每一项都能操作：悬停会高亮、滚轮会换层级、拖拽能移动、打字会过滤。不是录屏，也不是拼接的截图——它就是这个程序干活的逻辑。</p>
+
+      <div class="showcase" id="showcase">
+        <div class="tabs" role="tablist" aria-label="功能演示">
+          <button class="tab on" data-demo="monitor" role="tab" aria-selected="true">任务栏监视</button>
+          <button class="tab" data-demo="clipboard" role="tab" aria-selected="false">剪贴板历史</button>
+          <button class="tab" data-demo="capture" role="tab" aria-selected="false">截图与贴图</button>
+          <button class="tab" data-demo="pick" role="tab" aria-selected="false">元素识别</button>
+          <button class="tab" data-demo="ocr" role="tab" aria-selected="false">OCR 与翻译</button>
+          <button class="tab" data-demo="table" role="tab" aria-selected="false">表格识别</button>
+          <button class="tab" data-demo="draw" role="tab" aria-selected="false">标注</button>
+          <button class="tab" data-demo="gesture" role="tab" aria-selected="false">鼠标手势</button>
+          <button class="tab" data-demo="record" role="tab" aria-selected="false">录屏 / GIF</button>
+          <button class="tab" data-demo="convert" role="tab" aria-selected="false">格式转换</button>
+          <button class="tab" data-demo="icon" role="tab" aria-selected="false">图标提取</button>
+          <button class="tab" data-demo="imgbed" role="tab" aria-selected="false">图床上传</button>
+        </div>
+
+        <div class="stage">
+
+          <!-- 1. 任务栏监视 -->
+          <div class="pane on" data-pane="monitor">
+            <div class="demo-split">
+              <div class="demo-stage">
+                <div class="mock taskbar-mock">
+                  <div class="tb-hint">任务栏右下角（放大显示）</div>
+                  <div class="tb-strip" id="tb-strip">
+                    <span class="tb-chip" data-k="cpu"><i>CPU</i><b>38</b><em>%</em></span>
+                    <span class="tb-chip" data-k="ram"><i>内存</i><b>61</b><em>%</em></span>
+                    <span class="tb-chip" data-k="disk"><i>磁盘</i><b>12</b><em>%</em></span>
+                    <span class="tb-chip net"><i>↓</i><b>2.4</b><em>MB/s</em></span>
+                    <span class="tb-chip net"><i>↑</i><b>0.6</b><em>MB/s</em></span>
+                  </div>
+                  <div class="tb-spark">
+                    <div class="tb-spark-h">最近 30 秒 · CPU 占用</div>
+                    <div class="tb-bars" id="tb-bars"></div>
+                  </div>
+                  <div class="tb-pop" id="tb-pop">
+                    <div class="tb-pop-h">CPU 占用</div>
+                    <div class="tb-pop-f">8 核 · 3.2 GHz · 最高 4.6 GHz · 平均 37%</div>
+                  </div>
+                </div>
+              </div>
+              <div class="demo-copy">
+                <h3>不看任务管理器也知道机器怎么样</h3>
+                <p>CPU、内存、磁盘、GPU、上下行网速压在任务栏一小条里，数字自己跳。想看细节就点开，历史曲线和核心频率都在。</p>
+                <ul>
+                  <li>任务栏条 / 悬浮卡片两种形态</li>
+                  <li>多屏各显示各的，项目顺序能拖</li>
+                  <li>采样间隔可调，闲着的时候几乎不占 CPU</li>
+                </ul>
+              </div>
+            </div>
+            <div class="demo-bar"><span class="kbd">等一秒</span>数字会变<span class="kbd">点任一项</span>看详情</div>
+          </div>
+
+          <!-- 2. 剪贴板历史 -->
+          <div class="pane" data-pane="clipboard">
+            <div class="demo-split">
+              <div class="demo-stage">
+                <div class="mock cb-mock">
+                  <div class="cb-top">
+                    <input id="cb-search" type="text" placeholder="搜索历史…（试试输入 web）">
+                    <span class="cb-count" id="cb-count">6 条</span>
+                  </div>
+                  <div class="cb-list" id="cb-list">
+                    <div class="cb-item on" data-kind="文本" data-text="https://ztsite.com/nav 站点导航"><b>文本</b><span>https://ztsite.com/nav 站点导航</span></div>
+                    <div class="cb-item" data-kind="文本" data-text="npm run build -- --release"><b>文本</b><span>npm run build -- --release</span></div>
+                    <div class="cb-item" data-kind="图片" data-text="[图片] 1440×900 截屏"><b>图片</b><span>[图片] 1440×900 截屏</span></div>
+                    <div class="cb-item" data-kind="文本" data-text="web-flash 的部署脚本在 tools/deploy.sh"><b>文本</b><span>web-flash 的部署脚本在 tools/deploy.sh</span></div>
+                    <div class="cb-item" data-kind="文件" data-text="[文件] 3 个：a.png b.png c.png"><b>文件</b><span>[文件] 3 个：a.png b.png c.png</span></div>
+                    <div class="cb-item" data-kind="文本" data-text="SELECT * FROM orders WHERE status = 2;"><b>文本</b><span>SELECT * FROM orders WHERE status = 2;</span></div>
+                  </div>
+                </div>
+              </div>
+              <div class="demo-copy">
+                <h3>复制过的，都还在</h3>
+                <p>文本、图片、文件全收，重复的自动合并，翻回去找三天前那段 SQL 也不用重开编辑器。</p>
+                <ul>
+                  <li>搜索、收藏、标签，热键呼出</li>
+                  <li>粘贴时回填原格式，富文本不变样</li>
+                  <li>只存本机，不上传</li>
+                </ul>
+              </div>
+            </div>
+            <div class="demo-bar"><span class="kbd">输入框里打字</span>实时过滤<span class="kbd">点一条</span>看预览<em id="cb-state">选中：文本</em></div>
+          </div>
+
+          <!-- 3. 截图与贴图 -->
+          <div class="pane" data-pane="capture">
+            <div class="demo-split">
+              <div class="demo-stage">
+                <div class="mock cap-mock" id="cap-mock">
+                  <div class="cap-content">
+                    <div class="cap-line w80"></div>
+                    <div class="cap-line w60"></div>
+                    <div class="cap-card">这一段值得钉在屏幕上</div>
+                    <div class="cap-line w70"></div>
+                    <div class="cap-line w45"></div>
+                  </div>
+                  <div class="cap-sel" id="cap-sel"></div>
+                  <div class="cap-pin" id="cap-pin">
+                    <div class="cap-pin-body">这一段值得钉在屏幕上</div>
+                    <div class="cap-pin-x" title="双击关闭">×</div>
+                  </div>
+                </div>
+              </div>
+              <div class="demo-copy">
+                <h3>框住、贴上去，图片就留在屏幕上</h3>
+                <p>选完区直接钉成浮窗，可以拖、可以缩放、可以设透明度。对照着抄代码、比着改稿子，不用来回切窗口。</p>
+                <ul>
+                  <li>选区 / 窗口 / 全屏三种起手方式</li>
+                  <li>贴图置顶、可穿透鼠标，不挡操作</li>
+                  <li>同一张图钉多份，各钉各的位置</li>
+                </ul>
+              </div>
+            </div>
+            <div class="demo-bar"><button class="mini primary" id="cap-run">框选一段</button><span class="kbd">拖动</span>贴图可移<em>双击贴图可关闭</em></div>
+          </div>
+
+          <!-- 4. 元素识别 -->
+          <div class="pane" data-pane="pick">
+            <div class="demo-split">
+              <div class="demo-stage">
+                <div class="mock" id="m-pick">
+                  <div class="mock-head"><i></i><i></i><i></i><span>ztsite.com</span></div>
+                  <div class="mock-nav">
+                    <b data-el>首页</b><b data-el>应用</b><b data-el>工具</b><b data-el>社区</b><b data-el>热榜</b>
+                  </div>
+                  <div class="mock-main">
+                    <aside class="mock-side">
+                      <span data-el>生活服务</span><span data-el>影音娱乐</span><span data-el>在用工</span><span data-el>学习成长</span>
+                    </aside>
+                    <div class="mock-right">
+                      <div class="mock-cards">
+                        <a data-el>KeeTools</a><a data-el>CFIP</a><a data-el>爱打字</a>
+                        <a data-el>ZT 工具箱</a><a data-el>心悦书库</a><a data-el>自助申请</a>
+                      </div>
+                      <div class="mock-lines"><span></span><span></span><span></span></div>
+                    </div>
+                  </div>
+                  <div class="sel-box" id="m-sel"></div>
+                  <div class="sel-tip" id="m-tip">元素</div>
+                </div>
+              </div>
+              <div class="demo-copy">
+                <h3>框的是元素，不是像素</h3>
+                <p>鼠标一过就认出那是按钮、输入框还是整块卡片，滚轮往上收，从单个元素一路框到整个窗口。截控件图不用再对半天边。</p>
+                <ul>
+                  <li>走系统无障碍树，认得按钮 / 输入框 / 文本 / 图片 / 列表</li>
+                  <li>滚轮换层级，越滚越大</li>
+                  <li>认不出的自绘界面自动退回整窗，不会卡住</li>
+                </ul>
+              </div>
+            </div>
+            <div class="demo-bar"><span class="kbd">移动鼠标</span>高亮元素<span class="kbd">滚轮</span>逐级变大<em id="m-level">第 1 级 · 元素</em></div>
+          </div>
+
+          <!-- 5. OCR 与翻译 -->
+          <div class="pane" data-pane="ocr">
+            <div class="demo-split">
+              <div class="demo-stage">
+                <div class="mock mock-doc">
+                  <div class="doc-shot" id="m-doc">
+                    <p>驻匣 更新说明</p>
+                    <p>一、截图覆盖层支持滚轮切换层级。</p>
+                    <p>二、OCR 识别结果保留换行。</p>
+                    <p>三、翻译支持多语言选择。</p>
+                    <div class="scan" id="m-scan"></div>
+                  </div>
+                  <div class="doc-out" id="m-out">
+                    <div class="placeholder" id="m-out-hint">点下面的「识别文字」，这里会逐行出现结果</div>
+                    <div class="ln" data-src="驻匣 更新说明" data-dst="Zhuxia Release Notes"></div>
+                    <div class="ln" data-src="一、截图覆盖层支持滚轮切换层级。" data-dst="1. The capture overlay supports wheel level switching."></div>
+                    <div class="ln" data-src="二、OCR 识别结果保留换行。" data-dst="2. OCR results keep the original line breaks."></div>
+                    <div class="ln" data-src="三、翻译支持多语言选择。" data-dst="3. Translation supports choosing a target language."></div>
+                  </div>
+                </div>
+              </div>
+              <div class="demo-copy">
+                <h3>图里的字，直接变成能改的字</h3>
+                <p>截图后一步出文字，结果落在一个可编辑框里——错字能改，只想要其中一段就框选复制。换行按原来的行还原，不会糊成一条。</p>
+                <ul>
+                  <li>默认 Windows 自带 OCR；想更准可以装 PaddleOCR 模型（约 15 MB）</li>
+                  <li>翻译内置免费接口，也能换自己的；目标语言在结果窗口里选</li>
+                  <li>接上自己的 AI，一键把识别结果修成能直接粘贴的正文</li>
+                </ul>
+              </div>
+            </div>
+            <div class="demo-bar">
+              <button class="mini primary" id="m-ocr-run">识别文字</button>
+              <button class="mini" id="m-ocr-tr">翻译 → 英文</button>
+              <em id="m-ocr-state">待识别</em>
+            </div>
+          </div>
+
+          <!-- 6. 表格识别 -->
+          <div class="pane" data-pane="table">
+            <div class="demo-split">
+              <div class="demo-stage">
+                <div class="mock mock-table">
+                  <div class="raw" id="m-raw">
+                    <span style="left:24px;top:22px">服务</span><span style="left:200px;top:20px">端口</span><span style="left:330px;top:25px">状态</span>
+                    <span style="left:26px;top:56px">gateway</span><span style="left:198px;top:54px">8080</span><span style="left:332px;top:58px">运行中</span>
+                    <span style="left:22px;top:88px">worker</span><span style="left:202px;top:90px">9090</span><span style="left:330px;top:87px">已停止</span>
+                    <span style="left:25px;top:120px">redis</span><span style="left:200px;top:118px">6379</span><span style="left:331px;top:121px">运行中</span>
+                  </div>
+                  <div class="md" id="m-md"></div>
+                </div>
+              </div>
+              <div class="demo-copy">
+                <h3>截图里的表，能直接变成表格</h3>
+                <p>认出行和列，输出 Markdown。贴进文档、贴进 Issue、贴进笔记，对方看到的是能对齐的表，不是一张图。</p>
+                <ul>
+                  <li>按文字列心对齐，中文双宽单独算</li>
+                  <li>整齐的报表够用；合并单元格的复杂表会退化，不硬凑</li>
+                  <li>转不出来会明说，不拿串行的字冒充表格</li>
+                </ul>
+              </div>
+            </div>
+            <div class="demo-bar">
+              <button class="mini primary" id="m-table-run">转成表格</button>
+              <button class="mini" id="m-table-copy">复制 Markdown</button>
+              <em id="m-table-state">原始截图</em>
+            </div>
+          </div>
+
+          <!-- 7. 标注 -->
+          <div class="pane" data-pane="draw">
+            <div class="demo-split">
+              <div class="demo-stage">
+                <div class="mock mock-canvas" id="m-draw">
+                  <div class="dshot demo-grid">
+                    <div class="fake-card" id="fc1"><b>CPU</b><strong>38%</strong></div>
+                    <div class="fake-card" id="fc2"><b>内存</b><strong>61%</strong></div>
+                    <div class="fake-card" id="fc3"><b>网速</b><strong>2.4 MB/s</strong></div>
+                    <div class="fake-card" id="fc4"><b>磁盘</b><strong>12%</strong></div>
+                  </div>
+                  <svg class="anno" aria-hidden="true">
+                    <rect class="a-rect" rx="9"></rect>
+                    <path class="a-arrow"></path>
+                  </svg>
+                  <div class="a-mosaic"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+                </div>
+              </div>
+              <div class="demo-copy">
+                <h3>指给人看，比自己描述快十倍</h3>
+                <p>矩形、箭头、画笔、文字、马赛克、序号，画完直接复制或存盘。改稿意见、报错位置、要藏的信息，一张图说完。</p>
+                <ul>
+                  <li>工具都是即时生效，不用切模式</li>
+                  <li>马赛克和涂抹是真的糊掉像素（不是半透明遮罩）</li>
+                  <li>标注可撤销，画错了不用重截</li>
+                </ul>
+              </div>
+            </div>
+            <div class="demo-bar">
+              <button class="mini on" data-tool="rect">矩形</button>
+              <button class="mini" data-tool="arrow">箭头</button>
+              <button class="mini" data-tool="mosaic">马赛克</button>
+              <em>点工具看效果</em>
+            </div>
+          </div>
+
+          <!-- 8. 鼠标手势 -->
+          <div class="pane" data-pane="gesture">
+            <div class="demo-split">
+              <div class="demo-stage">
+                <div class="mock gs-mock" id="gs-pad">
+                  <div class="gs-dash">在任意位置按住鼠标拖一笔</div>
+                  <div class="gs-map">
+                    <span data-dir="U">↑ 上划<em>最大化窗口</em></span>
+                    <span data-dir="D">↓ 下划<em>还原 / 最小化</em></span>
+                    <span data-dir="L">← 左划<em>上一个任务窗口</em></span>
+                    <span data-dir="R">→ 右划<em>下一个任务窗口</em></span>
+                  </div>
+                  <div class="gs-act" id="gs-act">等待手势…</div>
+                  <svg class="gs-trail" aria-hidden="true"><path id="gs-path"></path></svg>
+                </div>
+              </div>
+              <div class="demo-copy">
+                <h3>右键划一下，比找菜单快</h3>
+                <p>八个方向加多笔组合，每个手势绑一个动作：切窗口、关标签、最大化、调音量。按程序分组——浏览器里划的，不会在编辑器里触发。</p>
+                <ul>
+                  <li>轨迹实时显示，按键状态也回显</li>
+                  <li>按进程/窗口类别分组，互不打扰</li>
+                  <li>滚轮修饰、边缘滚动都能绑</li>
+                </ul>
+              </div>
+            </div>
+            <div class="demo-bar"><span class="kbd">按住拖</span>画方向<span class="kbd">松开</span>识别并显示绑定的动作<em id="gs-state">未识别</em></div>
+          </div>
+
+          <!-- 9. 录屏 / GIF -->
+          <div class="pane" data-pane="record">
+            <div class="demo-split">
+              <div class="demo-stage">
+                <div class="mock rec-mock" id="rec-mock">
+                  <div class="rec-frame" id="rec-frame">
+                    <div class="rec-dot"></div>
+                    <span class="rec-time" id="rec-time">00:00</span>
+                    <div class="rec-scene">
+                      <div class="rec-block a"></div>
+                      <div class="rec-block b"></div>
+                      <div class="rec-block c"></div>
+                    </div>
+                  </div>
+                  <div class="rec-result" id="rec-result">
+                    <div class="rec-gif"><span>GIF</span><b id="rec-size">—</b><i id="rec-meta">10 fps · 960 宽</i></div>
+                  </div>
+                </div>
+              </div>
+              <div class="demo-copy">
+                <h3>框一块就开始录，停手就有文件</h3>
+                <p>GIF 和 MP4 双格式。录教程、录复现步骤、录一段动画给同事看，不用装剪辑软件。</p>
+                <ul>
+                  <li>GIF 自带调色板量化，体积可控</li>
+                  <li>可叠摄像头画中画或并排，麦克风 / 系统声音可选</li>
+                  <li>录完直接进图床，链接一发就完事</li>
+                </ul>
+              </div>
+            </div>
+            <div class="demo-bar">
+              <button class="mini primary" id="rec-run">开始录制</button>
+              <em id="rec-state">待开始</em>
+            </div>
+          </div>
+
+          <!-- 10. 格式转换 -->
+          <div class="pane" data-pane="convert">
+            <div class="demo-split">
+              <div class="demo-stage">
+                <div class="mock cv-mock">
+                  <div class="cv-file">
+                    <div class="cv-thumb"></div>
+                    <div class="cv-meta"><b>screenshot-1440.png</b><span id="cv-size">原图 2.41 MB</span></div>
+                  </div>
+                  <div class="cv-fmts">
+                    <button class="mini on" data-fmt="PNG">PNG</button>
+                    <button class="mini" data-fmt="JPG">JPG</button>
+                    <button class="mini" data-fmt="WebP">WebP</button>
+                    <button class="mini" data-fmt="AVIF">AVIF</button>
+                  </div>
+                  <div class="cv-bar"><i id="cv-bar"></i></div>
+                  <div class="cv-out" id="cv-out">选个格式看结果</div>
+                </div>
+              </div>
+              <div class="demo-copy">
+                <h3>右键就地转换，不用开软件</h3>
+                <p>资源管理器里选中一批图，右键转成 JPG / WebP / AVIF / ICO，质量自己定。批量转换时原地输出，文件名不打架。</p>
+                <ul>
+                  <li>支持 JPG / PNG / WebP / GIF / BMP / TIFF / ICO</li>
+                  <li>体积和质量的取舍一眼看得见</li>
+                  <li>不动原文件，转换失败不覆盖</li>
+                </ul>
+              </div>
+            </div>
+            <div class="demo-bar"><span class="kbd">点格式</span>看体积变化<em id="cv-state">当前 PNG</em></div>
+          </div>
+
+          <!-- 11. 图标提取 -->
+          <div class="pane" data-pane="icon">
+            <div class="demo-split">
+              <div class="demo-stage">
+                <div class="mock ic-mock">
+                  <div class="ic-files" id="ic-files">
+                    <button class="ic-file on" data-f="zhuxia.exe">zhuxia.exe</button>
+                    <button class="ic-file" data-f="setup.apk">setup.apk</button>
+                    <button class="ic-file" data-f="shortcut.lnk">shortcut.lnk</button>
+                  </div>
+                  <div class="ic-grid" id="ic-grid"></div>
+                </div>
+              </div>
+              <div class="demo-copy">
+                <h3>把图标从文件里挖出来</h3>
+                <p>exe、dll、lnk、msi、apk、ipa、dmg、icns、deb、rpm 都能拆，一次导出全部尺寸，做图标墙、抄配色、换快捷方式图标都用得上。</p>
+                <ul>
+                  <li>一张图集出 16 → 256 全尺寸 PNG</li>
+                  <li>也能单独要 .ico，直接替换</li>
+                  <li>不改动源文件</li>
+                </ul>
+              </div>
+            </div>
+            <div class="demo-bar"><span class="kbd">点文件</span>看拆出来的尺寸<em id="ic-state">3 个文件</em></div>
+          </div>
+
+          <!-- 12. 图床 -->
+          <div class="pane" data-pane="imgbed">
+            <div class="demo-split">
+              <div class="demo-stage">
+                <div class="mock ib-mock">
+                  <div class="ib-top">
+                    <span class="ib-pill on" data-p="GitHub">GitHub</span>
+                    <span class="ib-pill" data-p="S3">S3</span>
+                    <span class="ib-pill" data-p="WebDAV">WebDAV</span>
+                    <span class="ib-pill" data-p="自定义">自定义</span>
+                  </div>
+                  <div class="ib-file">
+                    <div class="cv-thumb small"></div>
+                    <div class="cv-meta"><b>shot-2026-11-25.webp</b><span>148 KB</span></div>
+                    <button class="mini primary" id="ib-run">上传</button>
+                  </div>
+                  <div class="cv-bar"><i id="ib-bar"></i></div>
+                  <div class="ib-out" id="ib-out">选好平台，点上传</div>
+                </div>
+              </div>
+              <div class="demo-copy">
+                <h3>传完就有链接，直接粘</h3>
+                <p>GitHub、S3 兼容、WebDAV、自定义 HTTP 四类后端。传完自动复制链接，Markdown / HTML / 直链三种格式按需给。</p>
+                <ul>
+                  <li>远端目录能一层层浏览，按年月分文件夹</li>
+                  <li>本地留一份上传记录，找得到传过什么</li>
+                  <li>凭据只存本机</li>
+                </ul>
+              </div>
+            </div>
+            <div class="demo-bar"><span class="kbd">选平台</span><span class="kbd">点上传</span>看结果<em id="ib-state">GitHub · 未上传</em></div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="scenes" aria-labelledby="scenes-h">
+    <div class="wrap">
+      <h2 id="scenes-h">三条线，覆盖大部分日常</h2>
+      <p class="lead">功能多不是目的。下面这三件事本来就要连着做，中间每一步都在切换工具——把切换去掉，省下的就是时间。</p>
+
+      <div class="scenes">
+        <article class="scene">
+          <div class="scene-tag">写文档 · 提 Issue</div>
+          <h3>一张报错截图，变成能搜索的文字</h3>
+          <ol>
+            <li><b>Alt+A 框住弹窗</b><span>元素识别直接锁在对话框上，不用对边</span></li>
+            <li><b>Shift+C 取字</b><span>换行按原样还原，不会糊成一整段</span></li>
+            <li><b>点「AI 整理」</b><span>形近字、断行、缩进一次修好</span></li>
+            <li><b>上传拿链接</b><span>图片放图床，链接自动进剪贴板</span></li>
+          </ol>
+          <p class="scene-end">全程不离开键盘，也不用为了取一段字去开第二个软件。</p>
+        </article>
+
+        <article class="scene">
+          <div class="scene-tag">做教程 · 复现步骤</div>
+          <h3>录一段 GIF，比写十行字清楚</h3>
+          <ol>
+            <li><b>框一块开始录</b><span>红框和计时贴在上面，知道在录哪</span></li>
+            <li><b>停手即出文件</b><span>GIF 体积可控，MP4 也可选</span></li>
+            <li><b>贴图对照</b><span>关键几步钉在屏幕上，一边看一边讲</span></li>
+            <li><b>直接发链接</b><span>录完自动进图床</span></li>
+          </ol>
+          <p class="scene-end">同事点开就懂，不用等你描述"先点左上角那个"。</p>
+        </article>
+
+        <article class="scene">
+          <div class="scene-tag">日常 · 机器状态</div>
+          <h3>不看任务管理器，也知道机器怎样</h3>
+          <ol>
+            <li><b>任务栏常驻</b><span>CPU / 内存 / 磁盘 / GPU / 网速压成两行</span></li>
+            <li><b>点开看趋势</b><span>最近 30 秒的曲线，判断是偶发还是持续</span></li>
+            <li><b>右键划一下</b><span>切窗口、关标签，不用找菜单</span></li>
+            <li><b>剪贴板兜底</b><span>早上复制的那段 SQL 还在</span></li>
+          </ol>
+          <p class="scene-end">常驻部分只做采样和绘制，不常驻 WebView，闲时几乎不占 CPU。</p>
+        </article>
+      </div>
     </div>
   </section>
 
@@ -168,5 +640,684 @@
   </div>
 </footer>
 
+<script>
+/* 功能演示：12 个 demo，全部本地逻辑，没有网络请求。
+   目标是把"为什么这个功能好用"演出来，所以每个都真的响应鼠标/键盘。 */
+(function () {
+  var showcase = document.getElementById('showcase');
+  if (!showcase) return;
+
+  var NL = String.fromCharCode(10);
+  var $ = function (id) { return document.getElementById(id); };
+
+  /* ---------- 标签切换 ---------- */
+  var tabs = [].slice.call(showcase.querySelectorAll('.tab'));
+  var panes = [].slice.call(showcase.querySelectorAll('.pane'));
+  var autoStopped = false;
+
+  function show(name) {
+    tabs.forEach(function (t) {
+      var on = t.dataset.demo === name;
+      t.classList.toggle('on', on);
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+    panes.forEach(function (p) {
+      p.classList.toggle('on', p.dataset.pane === name);
+    });
+    if (name === 'ocr') resetOcr();
+    if (name === 'table') resetTable();
+    if (name === 'draw' || name === 'capture') {
+      // 面板刚从 display:none 变成可见，rAF 这一帧可能还没完成布局，
+      // 量到的 offsetWidth 是 0，坐标就全丢了。补一次延时重算。
+      requestAnimationFrame(layoutAnno);
+      setTimeout(layoutAnno, 90);
+    }
+  }
+
+  tabs.forEach(function (t) {
+    t.addEventListener('click', function () {
+      autoStopped = true;
+      show(t.dataset.demo);
+    });
+  });
+
+  // 自动轮播：首屏停留短的人也能看到后面几项。鼠标移入或点过就停。
+  setInterval(function () {
+    if (autoStopped || document.hidden) return;
+    var i = tabs.findIndex(function (t) { return t.classList.contains('on'); });
+    show(tabs[(i + 1) % tabs.length].dataset.demo);
+  }, 8000);
+  showcase.addEventListener('mouseenter', function () { autoStopped = true; });
+
+  /* ---------- 1. 任务栏监视 ---------- */
+  var strip = $('tb-strip');
+  var pop = $('tb-pop');
+  var bars = $('tb-bars');
+  if (strip) {
+    var base = { cpu: 38, ram: 61, disk: 12, down: 2.4, up: 0.6 };
+    var chipEls = [].slice.call(strip.querySelectorAll('.tb-chip'));
+    var hist = [];
+    for (var i = 0; i < 24; i++) hist.push(30 + Math.random() * 45);
+
+    function paintBars() {
+      bars.innerHTML = hist.map(function (v) {
+        return '<i style="height:' + Math.round(v) + '%"></i>';
+      }).join('');
+    }
+    paintBars();
+
+    setInterval(function () {
+      var v = Math.max(4, Math.min(96, base.cpu + (Math.random() - 0.5) * 14));
+      base.cpu = v;
+      hist.push(v);
+      hist.shift();
+      paintBars();
+      chipEls.forEach(function (c) {
+        var b = c.querySelector('b');
+        if (c.dataset.k === 'cpu') b.textContent = Math.round(v);
+        else if (c.dataset.k === 'ram') b.textContent = Math.round(Math.max(20, Math.min(95, base.ram + (Math.random() - 0.5) * 2)));
+        else if (c.dataset.k === 'disk') b.textContent = Math.round(Math.max(2, Math.min(60, base.disk + (Math.random() - 0.5) * 3)));
+        else {
+          var nm = (Math.random() * 3.4).toFixed(1);
+          if (b.textContent.indexOf('.') >= 0 || c.querySelector('i').textContent === '↓') b.textContent = nm;
+          else b.textContent = (Math.random() * 0.9).toFixed(1);
+        }
+      });
+    }, 900);
+
+    chipEls.forEach(function (c) {
+      c.addEventListener('click', function () {
+        chipEls.forEach(function (x) { x.classList.toggle('on', x === c); });
+        pop.classList.add('on');
+        pop.querySelector('.tb-pop-h').textContent =
+          c.querySelector('i').textContent + ' ' + (c.dataset.k ? '占用' : '速度');
+      });
+    });
+  }
+
+  /* ---------- 2. 剪贴板 ---------- */
+  var cbSearch = $('cb-search');
+  var cbList = $('cb-list');
+  var cbCount = $('cb-count');
+  var cbState = $('cb-state');
+  if (cbList) {
+    var items = [].slice.call(cbList.querySelectorAll('.cb-item'));
+    var filter = function () {
+      var q = (cbSearch.value || '').trim().toLowerCase();
+      var n = 0;
+      items.forEach(function (it) {
+        var hit = !q || it.dataset.text.toLowerCase().indexOf(q) >= 0;
+        it.classList.toggle('hide', !hit);
+        if (hit) n++;
+      });
+      cbCount.textContent = n + ' 条';
+    };
+    cbSearch.addEventListener('input', filter);
+    items.forEach(function (it) {
+      it.addEventListener('click', function () {
+        items.forEach(function (x) { x.classList.toggle('on', x === it); });
+        cbState.textContent = '选中：' + it.dataset.kind + ' · ' + it.dataset.text.slice(0, 16);
+      });
+    });
+  }
+
+  /* ---------- 3. 截图与贴图 ---------- */
+  var capMock = $('cap-mock');
+  var capSel = $('cap-sel');
+  var capPin = $('cap-pin');
+  var capCard = capMock ? capMock.querySelector('.cap-card') : null;
+
+  if (capMock && capCard) {
+    $('cap-run').addEventListener('click', function () {
+      var r = capCard.getBoundingClientRect();
+      var m = capMock.getBoundingClientRect();
+      capSel.style.left = (r.left - m.left - 8) + 'px';
+      capSel.style.top = (r.top - m.top - 8) + 'px';
+      capSel.style.width = (r.width + 16) + 'px';
+      capSel.style.height = (r.height + 16) + 'px';
+      capSel.classList.remove('run');
+      void capSel.offsetWidth;
+      capSel.classList.add('run');
+      capPin.classList.add('on');
+      capPin.style.left = '';
+      capPin.style.top = '';
+      capPin.style.right = '18px';
+      capPin.style.bottom = 'auto';
+    });
+
+    var drag = null;
+    capPin.addEventListener('pointerdown', function (e) {
+      var r = capPin.getBoundingClientRect();
+      var m = capMock.getBoundingClientRect();
+      drag = { dx: e.clientX - r.left, dy: e.clientY - r.top, mw: m.width, mh: m.height, w: r.width, h: r.height };
+      capPin.classList.add('dragging');
+      capPin.style.right = 'auto';
+      capPin.style.left = (r.left - m.left) + 'px';
+      capPin.style.top = (r.top - m.top) + 'px';
+      capPin.setPointerCapture(e.pointerId);
+    });
+    capPin.addEventListener('pointermove', function (e) {
+      if (!drag) return;
+      var m = capMock.getBoundingClientRect();
+      var x = Math.max(0, Math.min(drag.mw - drag.w, e.clientX - m.left - drag.dx));
+      var y = Math.max(0, Math.min(drag.mh - drag.h, e.clientY - m.top - drag.dy));
+      capPin.style.left = x + 'px';
+      capPin.style.top = y + 'px';
+    });
+    capPin.addEventListener('pointerup', function () {
+      drag = null;
+      capPin.classList.remove('dragging');
+    });
+    capPin.addEventListener('dblclick', function () {
+      capPin.classList.remove('on');
+    });
+  }
+
+  /* ---------- 4. 元素识别 ---------- */
+  var mock = $('m-pick');
+  var box = $('m-sel');
+  var tip = $('m-tip');
+  var levelTag = $('m-level');
+  var LEVEL_NAMES = ['元素', '所在行', '内容区', '窗口'];
+  var chain = [];
+  var level = 0;
+  var lastEl = null;
+
+  function chainOf(el) {
+    var out = [el];
+    var p = el.parentElement;
+    while (p && p !== mock) {
+      if (p.classList.contains('mock-cards') || p.classList.contains('mock-nav') ||
+          p.classList.contains('mock-side') || p.classList.contains('mock-main')) {
+        out.push(p);
+      }
+      p = p.parentElement;
+    }
+    out.push(mock);
+    return out;
+  }
+
+  function paintSel() {
+    if (!chain.length) return;
+    var el = chain[Math.min(level, chain.length - 1)];
+    var r = el.getBoundingClientRect();
+    var m = mock.getBoundingClientRect();
+    box.style.left = (r.left - m.left) + 'px';
+    box.style.top = (r.top - m.top) + 'px';
+    box.style.width = r.width + 'px';
+    box.style.height = r.height + 'px';
+    box.classList.add('on');
+    var name = LEVEL_NAMES[Math.min(level, LEVEL_NAMES.length - 1)];
+    tip.classList.add('on');
+    tip.style.left = (r.left - m.left) + 'px';
+    tip.style.top = Math.max(0, r.top - m.top - 24) + 'px';
+    var text = el === mock ? '窗口' : (el.textContent || '').trim().slice(0, 16);
+    tip.textContent = name + (el === mock ? '' : ' · ' + text);
+    if (levelTag) levelTag.textContent = '第 ' + (level + 1) + ' 级 · ' + name;
+  }
+
+  if (mock) {
+    mock.addEventListener('mousemove', function (e) {
+      var el = e.target.closest('[data-el]');
+      if (!el || !mock.contains(el)) return;
+      if (el !== lastEl) {
+        lastEl = el;
+        chain = chainOf(el);
+        level = 0;
+      }
+      paintSel();
+    });
+    mock.addEventListener('mouseleave', function () {
+      box.classList.remove('on');
+      tip.classList.remove('on');
+      lastEl = null;
+      chain = [];
+    });
+    mock.addEventListener('wheel', function (e) {
+      if (!chain.length) return;
+      e.preventDefault();
+      var max = Math.min(chain.length, LEVEL_NAMES.length) - 1;
+      level = e.deltaY > 0 ? Math.min(max, level + 1) : Math.max(0, level - 1);
+      paintSel();
+    }, { passive: false });
+  }
+
+  /* ---------- 5. OCR + 翻译 ---------- */
+  var out = $('m-out');
+  var scan = $('m-scan');
+  var ocrRun = $('m-ocr-run');
+  var ocrTr = $('m-ocr-tr');
+  var ocrState = $('m-ocr-state');
+  var lines = out ? [].slice.call(out.querySelectorAll('.ln')) : [];
+  var timers = [];
+
+  function clearTimers() {
+    timers.forEach(clearTimeout);
+    timers = [];
+  }
+
+  function resetOcr() {
+    clearTimers();
+    if (!out) return;
+    lines.forEach(function (l) {
+      l.classList.remove('on', 'done');
+      l.textContent = '';
+    });
+    var hint = $('m-out-hint');
+    if (hint) hint.classList.remove('off');
+    if (ocrState) ocrState.textContent = '待识别';
+  }
+
+  if (ocrRun) {
+    ocrRun.addEventListener('click', function () {
+      clearTimers();
+      if (scan) {
+        scan.classList.remove('run');
+        void scan.offsetWidth;
+        scan.classList.add('run');
+      }
+      var hint = $('m-out-hint');
+      if (hint) hint.classList.add('off');
+      lines.forEach(function (l) { l.classList.remove('on', 'done'); l.textContent = ''; });
+      if (ocrState) ocrState.textContent = '识别中…';
+      lines.forEach(function (l, i) {
+        timers.push(setTimeout(function () {
+          l.textContent = l.dataset.src;
+          l.classList.add('on');
+          if (i === lines.length - 1 && ocrState) ocrState.textContent = lines.length + ' 行';
+        }, 880 + i * 160));
+      });
+    });
+  }
+
+  var translated = false;
+  if (ocrTr) {
+    ocrTr.addEventListener('click', function () {
+      if (!lines.length) return;
+      translated = !translated;
+      lines.forEach(function (l, i) {
+        timers.push(setTimeout(function () {
+          l.textContent = translated ? l.dataset.dst : l.dataset.src;
+          l.classList.toggle('done', translated);
+        }, i * 80));
+      });
+      ocrTr.textContent = translated ? '原文 ← 中文' : '翻译 → 英文';
+    });
+  }
+
+  /* ---------- 6. 表格识别 ---------- */
+  var raw = $('m-raw');
+  var md = $('m-md');
+  var tableRun = $('m-table-run');
+  var tableCopy = $('m-table-copy');
+  var tableState = $('m-table-state');
+  var TABLE = [
+    ['服务', '端口', '状态'],
+    ['gateway', '8080', '运行中'],
+    ['worker', '9090', '已停止'],
+    ['redis', '6379', '运行中']
+  ];
+
+  function dw(s) {
+    var n = 0;
+    for (var i = 0; i < s.length; i++) n += s.charCodeAt(i) > 0x2e80 ? 2 : 1;
+    return n;
+  }
+
+  function pad(s, n) {
+    var p = n - dw(s);
+    return p > 0 ? s + new Array(p + 1).join(' ') : s;
+  }
+
+  function mdLines() {
+    var w = [];
+    TABLE.forEach(function (row) {
+      row.forEach(function (c, j) { w[j] = Math.max(w[j] || 0, dw(c)); });
+    });
+    var out = TABLE.map(function (row) {
+      return '| ' + row.map(function (c, j) { return pad(c, w[j]); }).join(' | ') + ' |';
+    });
+    out.splice(1, 0, '| ' + w.map(function (n) { return new Array(n + 1).join('-'); }).join(' | ') + ' |');
+    return out;
+  }
+
+  function renderMd() {
+    md.innerHTML = mdLines().map(function (line, i) {
+      var cls = i === 0 ? 'hd' : (i === 1 ? 'sep' : '');
+      return '<div' + (cls ? ' class="' + cls + '"' : '') + '>' +
+        line.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</div>';
+    }).join('');
+  }
+
+  function resetTable() {
+    if (!md) return;
+    md.classList.remove('on');
+    raw.classList.remove('off');
+    if (tableState) tableState.textContent = '原始截图';
+  }
+
+  if (tableRun) {
+    tableRun.addEventListener('click', function () {
+      raw.classList.add('off');
+      renderMd();
+      setTimeout(function () { md.classList.add('on'); }, 240);
+      if (tableState) tableState.textContent = 'Markdown 表格';
+    });
+  }
+
+  if (tableCopy) {
+    tableCopy.addEventListener('click', function () {
+      var text = mdLines().join(NL);
+      var done = function () {
+        tableCopy.textContent = '已复制';
+        setTimeout(function () { tableCopy.textContent = '复制 Markdown'; }, 1400);
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done, done);
+      } else {
+        done();
+      }
+    });
+  }
+
+  /* ---------- 7. 标注 ---------- */
+  var canvasMock = $('m-draw');
+  var aRect = canvasMock ? canvasMock.querySelector('.a-rect') : null;
+  var aArrow = canvasMock ? canvasMock.querySelector('.a-arrow') : null;
+  var aMos = canvasMock ? canvasMock.querySelector('.a-mosaic') : null;
+  var fc1 = $('fc1');
+  var fc4 = $('fc4');
+
+  function rel(el, inset) {
+    var r = el.getBoundingClientRect();
+    var m = canvasMock.getBoundingClientRect();
+    return {
+      x: r.left - m.left - inset,
+      y: r.top - m.top - inset,
+      w: r.width + inset * 2,
+      h: r.height + inset * 2
+    };
+  }
+
+  function layoutAnno() {
+    if (!canvasMock || !fc1 || !fc4 || !canvasMock.offsetWidth) return;
+    var b = rel(fc1, 7);
+    aRect.setAttribute('x', b.x);
+    aRect.setAttribute('y', b.y);
+    aRect.setAttribute('width', b.w);
+    aRect.setAttribute('height', b.h);
+
+    var c1 = rel(fc1, 0);
+    var x1 = Math.max(10, c1.x - 82);
+    var y1 = c1.y + c1.h + 26;
+    var x2 = c1.x - 9;
+    var y2 = c1.y + c1.h - 10;
+    if (c1.x - 82 < 10) {
+      x1 = c1.x + 22;
+      y1 = c1.y + c1.h + 24;
+      x2 = c1.x + 14;
+      y2 = c1.y + c1.h + 5;
+    }
+    var dx = x2 - x1;
+    var dy = y2 - y1;
+    var len = Math.sqrt(dx * dx + dy * dy) || 1;
+    var ux = dx / len;
+    var uy = dy / len;
+    var hx = x2 - ux * 11;
+    var hy = y2 - uy * 11;
+    var px = -uy * 5.5;
+    var py = ux * 5.5;
+    aArrow.setAttribute('d',
+      'M' + x1 + ',' + y1 + ' L' + x2 + ',' + y2 +
+      ' M' + (hx + px) + ',' + (hy + py) + ' L' + x2 + ',' + y2 +
+      ' L' + (hx - px) + ',' + (hy - py));
+
+    var c = rel(fc4, 0);
+    aMos.style.left = (c.x + 8) + 'px';
+    aMos.style.top = (c.y + c.h * 0.34) + 'px';
+    aMos.style.width = Math.min(124, c.w * 0.45) + 'px';
+    aMos.style.height = '34px';
+  }
+
+  var tools = [].slice.call(showcase.querySelectorAll('[data-tool]'));
+  tools.forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      tools.forEach(function (b) { b.classList.toggle('on', b === btn); });
+      ['rect', 'arrow', 'mosaic'].forEach(function (t) { canvasMock.classList.remove('show-' + t); });
+      void canvasMock.offsetWidth;
+      canvasMock.classList.add('show-' + btn.dataset.tool);
+    });
+  });
+
+  layoutAnno();
+  window.addEventListener('resize', layoutAnno);
+  if (canvasMock) canvasMock.classList.add('show-rect');
+
+  /* ---------- 8. 鼠标手势 ---------- */
+  var gsPad = $('gs-pad');
+  var gsPath = $('gs-path');
+  var gsAct = $('gs-act');
+  var gsState = $('gs-state');
+  var GS_ACTIONS = { U: '最大化窗口', D: '还原 / 最小化', L: '上一个任务窗口', R: '下一个任务窗口' };
+
+  if (gsPad && gsPath) {
+    var drawing = false;
+    var pts = [];
+    var gsFade = 0;
+
+    // 手势画完就淡出：轨迹留着不放，下一个动作开始时屏幕上还挂着上一笔，
+    // 看着像没结束（用户反馈"操作完成了轨迹还在"）。
+    function fadeTrail() {
+      gsPath.classList.add('fade');
+      clearTimeout(gsFade);
+      gsFade = setTimeout(function () {
+        // 正在画新的一笔：只把淡出撤掉，别把刚画的轨迹清了
+        gsPath.classList.remove('fade');
+        if (drawing) return;
+        gsPath.setAttribute('d', '');
+      }, 620);
+    }
+
+    function local(e) {
+      var b = gsPad.getBoundingClientRect();
+      return { x: e.clientX - b.left, y: e.clientY - b.top };
+    }
+
+    gsPad.addEventListener('pointerdown', function (e) {
+      if (e.button !== 0 && e.button !== 2) return;
+      e.preventDefault();
+      drawing = true;
+      clearTimeout(gsFade);
+      gsPath.classList.remove('fade');
+      pts = [local(e)];
+      gsPath.setAttribute('d', 'M' + pts[0].x + ',' + pts[0].y);
+      gsPad.setPointerCapture(e.pointerId);
+      gsAct.textContent = '画吧…';
+      [].slice.call(gsPad.querySelectorAll('.gs-map span')).forEach(function (s) { s.classList.remove('on'); });
+    });
+
+    gsPad.addEventListener('pointermove', function (e) {
+      if (!drawing) return;
+      var p = local(e);
+      var last = pts[pts.length - 1];
+      if (Math.abs(p.x - last.x) + Math.abs(p.y - last.y) < 3) return;
+      pts.push(p);
+      gsPath.setAttribute('d', gsPath.getAttribute('d') + ' L' + p.x + ',' + p.y);
+    });
+
+    gsPad.addEventListener('pointerup', function () {
+      if (!drawing) return;
+      drawing = false;
+      if (pts.length < 3) {
+        gsAct.textContent = '太短了，再画长一点';
+        fadeTrail();
+        return;
+      }
+      var a = pts[0];
+      var b = pts[pts.length - 1];
+      var dx = b.x - a.x;
+      var dy = b.y - a.y;
+      var dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'R' : 'L') : (dy > 0 ? 'D' : 'U');
+      [].slice.call(gsPad.querySelectorAll('.gs-map span')).forEach(function (s) {
+        s.classList.toggle('on', s.dataset.dir === dir);
+      });
+      gsAct.innerHTML = '识别为 <b>' + { U: '↑ 上', D: '↓ 下', L: '← 左', R: '→ 右' }[dir] +
+        '</b> → 执行「' + GS_ACTIONS[dir] + '」';
+      if (gsState) gsState.textContent = '已识别 · ' + GS_ACTIONS[dir];
+      fadeTrail();
+    });
+
+    gsPad.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+  }
+
+  /* ---------- 9. 录屏 ---------- */
+  var recFrame = $('rec-frame');
+  var recTime = $('rec-time');
+  var recRun = $('rec-run');
+  var recResult = $('rec-result');
+  var recState = $('rec-state');
+  var recSize = $('rec-size');
+  var recMeta = $('rec-meta');
+  var recTimer = 0;
+  var recSec = 0;
+  var recording = false;
+
+  function fmt(s) {
+    var m = Math.floor(s / 60);
+    var r = s % 60;
+    return (m < 10 ? '0' : '') + m + ':' + (r < 10 ? '0' : '') + r;
+  }
+
+  if (recFrame) {
+    recRun.addEventListener('click', function () {
+      if (!recording) {
+        recording = true;
+        recSec = 0;
+        recFrame.classList.add('rec');
+        recResult.classList.remove('on');
+        recRun.textContent = '停止录制';
+        recState.textContent = '录制中…';
+        recTime.textContent = '00:00';
+        recTimer = setInterval(function () {
+          recSec++;
+          recTime.textContent = fmt(recSec);
+        }, 1000);
+      } else {
+        recording = false;
+        clearInterval(recTimer);
+        recFrame.classList.remove('rec');
+        recRun.textContent = '重新录一段';
+        recState.textContent = '编码中…';
+        var kb = Math.max(240, recSec * 180 + Math.round(Math.random() * 60));
+        setTimeout(function () {
+          recSize.textContent = kb + ' KB';
+          recMeta.textContent = '10 fps · 960 宽 · ' + recSec + ' 秒';
+          recResult.classList.add('on');
+          recState.textContent = '已生成 GIF';
+        }, 700);
+      }
+    });
+  }
+
+  /* ---------- 10. 格式转换 ---------- */
+  var cvBar = $('cv-bar');
+  var cvOut = $('cv-out');
+  var cvState = $('cv-state');
+  var cvSize = $('cv-size');
+  var CV = { PNG: [2.41, '无损，带透明'], JPG: [0.42, '有损，质量 90'], WebP: [0.19, '有损，兼容性略差'], AVIF: [0.11, '有损，新版浏览器'] };
+  var fmts = [].slice.call(showcase.querySelectorAll('[data-fmt]'));
+
+  fmts.forEach(function (b) {
+    b.addEventListener('click', function () {
+      fmts.forEach(function (x) { x.classList.toggle('on', x === b); });
+      var f = b.dataset.fmt;
+      var v = CV[f];
+      cvBar.style.width = '0';
+      cvOut.textContent = '转换中…';
+      setTimeout(function () { cvBar.style.width = '100%'; }, 30);
+      setTimeout(function () {
+        cvSize.textContent = '原图 2.41 MB';
+        cvOut.innerHTML = '<b>' + f + '</b> · ' + v[0].toFixed(2) + ' MB · ' + v[1] +
+          ' · 省 ' + Math.round((1 - v[0] / 2.41) * 100) + '%';
+        if (cvState) cvState.textContent = '当前 ' + f;
+      }, 520);
+    });
+  });
+
+  /* ---------- 11. 图标提取 ---------- */
+  var icGrid = $('ic-grid');
+  var icFiles = [].slice.call(showcase.querySelectorAll('.ic-file'));
+  var ICON_SIZES = [256, 128, 64, 48, 32, 16];
+  var ICONS = {
+    'zhuxia.exe': ['#2e90fa', '#a855f7'],
+    'setup.apk': ['#22c55e', '#0ea5e9'],
+    'shortcut.lnk': ['#ffa940', '#ff453a']
+  };
+
+  function renderIcons(name) {
+    var g = ICONS[name] || ICONS['zhuxia.exe'];
+    icGrid.innerHTML = ICON_SIZES.map(function (s, i) {
+      var px = s >= 256 ? 58 : s >= 128 ? 44 : s >= 64 ? 32 : s >= 48 ? 25 : s >= 32 ? 18 : 12;
+      return '<div class="ic-cell" style="animation-delay:' + (i * 45) + 'ms">' +
+        '<i style="width:' + px + 'px;height:' + px + 'px;background:linear-gradient(135deg,' + g[0] + ',' + g[1] + ')"></i>' +
+        '<span>' + s + 'px</span></div>';
+    }).join('');
+  }
+
+  icFiles.forEach(function (b) {
+    b.addEventListener('click', function () {
+      icFiles.forEach(function (x) { x.classList.toggle('on', x === b); });
+      renderIcons(b.dataset.f);
+    });
+  });
+  if (icGrid) renderIcons('zhuxia.exe');
+
+  /* ---------- 12. 图床 ---------- */
+  var ibBar = $('ib-bar');
+  var ibOut = $('ib-out');
+  var ibState = $('ib-state');
+  var pills = [].slice.call(showcase.querySelectorAll('.ib-pill'));
+  var provider = 'GitHub';
+  var HOSTS = {
+    GitHub: 'https://cdn.jsdelivr.net/gh/user/pics@main/2026/11/shot.webp',
+    S3: 'https://pics.oss-cn-hangzhou.aliyuncs.com/2026/11/shot.webp',
+    WebDAV: 'https://dav.example.com/pics/2026/11/shot.webp',
+    '自定义': 'https://img.example.com/2026/11/shot.webp'
+  };
+
+  pills.forEach(function (p) {
+    p.addEventListener('click', function () {
+      pills.forEach(function (x) { x.classList.toggle('on', x === p); });
+      provider = p.dataset.p;
+      if (ibState) ibState.textContent = provider + ' · 未上传';
+      ibOut.textContent = '选好平台，点上传';
+      ibBar.style.width = '0';
+    });
+  });
+
+  if ($('ib-run')) {
+    $('ib-run').addEventListener('click', function () {
+      var pct = 0;
+      ibBar.style.width = '0';
+      ibOut.textContent = '上传中…';
+      var t = setInterval(function () {
+        pct = Math.min(100, pct + 12 + Math.random() * 16);
+        ibBar.style.width = Math.round(pct) + '%';
+        if (pct >= 100) {
+          clearInterval(t);
+          var url = HOSTS[provider];
+          setTimeout(function () {
+            ibOut.innerHTML = '已复制：<a href="#" onclick="return false">' + url + '</a>';
+            if (ibState) ibState.textContent = provider + ' · 上传完成';
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+              navigator.clipboard.writeText(url).catch(function () {});
+            }
+          }, 260);
+        }
+      }, 160);
+    });
+  }
+})();
+</script>
 </body>
 </html>

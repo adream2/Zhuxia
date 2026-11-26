@@ -29,9 +29,6 @@ impl ClashPoller {
                     } else {
                         format!("http://{}/connections", addr.trim_end_matches('/'))
                     };
-                    let mut headers: Vec<(&str, &str)> = vec![];
-                    if !secret.is_empty() { headers.push(("Authorization", "")); }
-                    let _ = &headers;
                     let body = if secret.is_empty() {
                         crate::http::get_text(&url, 2000)
                     } else {

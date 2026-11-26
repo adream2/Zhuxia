@@ -6,7 +6,7 @@ use windows::Win32::Security::{GetTokenInformation, TokenElevation, TOKEN_ELEVAT
 use windows::Win32::System::Registry::{HKEY_CURRENT_USER, RRF_RT_REG_DWORD, RegGetValueW};
 use windows::Win32::System::SystemInformation::GetLocalTime;
 use windows::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
-use windows::Win32::UI::Shell::ShellExecuteW;
+use windows::Win32::UI::Shell::{ShellExecuteExW, ShellExecuteW, SHELLEXECUTEINFOW};
 use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
 
 pub fn wide(s: &str) -> Vec<u16> { s.encode_utf16().chain(std::iter::once(0)).collect() }
@@ -137,14 +137,80 @@ fn token_elevated() -> bool {
     }
 }
 
-/// 以管理员身份重启自己（UAC）。返回是否成功发起。
-pub fn relaunch_elevated() -> bool {
+/// 给一个参数补引号，规则与 `CommandLineToArgvW` 的反解析一致。
+///
+/// 不做这一步直接拼字符串，`--settings "a b"` 会被拆成两个参数，路径里的引号/反斜杠
+/// 也会被吃掉。Windows 的规则是：引号内的 `\` 只有在引号前才需要翻倍。
+fn quote_arg(a: &str) -> String {
+    if !a.is_empty() && !a.contains([' ', '\t', '"']) {
+        return a.to_string();
+    }
+    let mut out = String::with_capacity(a.len() + 2);
+    out.push('"');
+    // 本文件不依赖 `std::iter::repeat_n`（较新工具链才有），直接循环追加
+    fn push_n(out: &mut String, ch: char, n: usize) {
+        for _ in 0..n {
+            out.push(ch);
+        }
+    }
+    let mut backslashes = 0usize;
+    for ch in a.chars() {
+        match ch {
+            '\\' => backslashes += 1,
+            '"' => {
+                // 引号前：反斜杠翻倍，再补一个转义引号
+                push_n(&mut out, '\\', backslashes * 2 + 1);
+                out.push('"');
+                backslashes = 0;
+            }
+            c => {
+                push_n(&mut out, '\\', backslashes);
+                backslashes = 0;
+                out.push(c);
+            }
+        }
+    }
+    // 结尾：反斜杠要翻倍，否则会把收尾的引号转义掉
+    push_n(&mut out, '\\', backslashes * 2);
+    out.push('"');
+    out
+}
+
+/// 把参数列表拼成一条命令行（每个参数按需加引号）。
+pub fn quote_args(args: &[String]) -> String {
+    args.iter().map(|a| quote_arg(a)).collect::<Vec<_>>().join(" ")
+}
+
+/// 提权重启后子进程的标记参数。
+///
+/// 只有它能让单实例获取多等一会儿（父进程还没退干净）。普通重复启动不背这个延迟。
+pub const AFTER_ELEVATE_ARG: &str = "--after-elevate";
+
+/// 以管理员身份重启自己（UAC），**保留原命令行参数**。
+///
+/// 以前用 `ShellExecuteW` 且不传参数，于是 `zhuxia.exe --open-settings` 在未提权时
+/// 走 UAC 重启后参数就丢了——用户点了"打开设置"却什么都没发生。
+///
+/// 返回是否成功发起。父进程不必等子进程：子进程拿单实例互斥时会自己重试
+/// （见 `taskmon::runtime::acquire_single_instance`）。
+pub fn relaunch_elevated(args: &[String]) -> bool {
+    // 打一个"我是提权后的自己"的标记：单实例那一步据此放宽重试窗口
+    let mut args: Vec<String> = args.iter().filter(|a| *a != AFTER_ELEVATE_ARG).cloned().collect();
+    args.push(AFTER_ELEVATE_ARG.to_string());
     let Ok(exe) = std::env::current_exe() else { return false };
     let file = wide(&exe.to_string_lossy());
+    let params = wide(&quote_args(&args));
     let verb = w!("runas");
     unsafe {
-        let r = ShellExecuteW(HWND::default(), verb, PCWSTR(file.as_ptr()), windows::core::PCWSTR::null(), windows::core::PCWSTR::null(), SW_SHOWNORMAL);
-        r.0 as isize > 32
+        let mut info = SHELLEXECUTEINFOW {
+            cbSize: std::mem::size_of::<SHELLEXECUTEINFOW>() as u32,
+            lpVerb: verb,
+            lpFile: PCWSTR(file.as_ptr()),
+            lpParameters: PCWSTR(params.as_ptr()),
+            nShow: SW_SHOWNORMAL.0,
+            ..Default::default()
+        };
+        ShellExecuteExW(&mut info).is_ok()
     }
 }
 
@@ -180,5 +246,43 @@ pub fn find_child_by_class(parent: HWND, class: &str) -> HWND {
         }
         h = HWND::default();
         h
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::quote_args;
+
+    fn v(items: &[&str]) -> Vec<String> {
+        items.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn plain_args_are_not_quoted() {
+        assert_eq!(quote_args(&v(&["--open-settings", "abc"])), "--open-settings abc");
+    }
+
+    #[test]
+    fn args_with_spaces_get_quoted() {
+        // 提权重启时最容易踩到的就是带空格的路径
+        assert_eq!(
+            quote_args(&v(&["--settings", r"C:\Program Files\a b.txt"])),
+            r#"--settings "C:\Program Files\a b.txt""#
+        );
+    }
+
+    #[test]
+    fn empty_arg_is_preserved_as_empty_pair() {
+        assert_eq!(quote_args(&v(&["--x", ""])), "--x \"\"");
+    }
+
+    #[test]
+    fn quotes_and_trailing_backslashes_survive_a_roundtrip() {
+        // 不含空格的参数不加引号，结尾反斜杠也就不需要处理
+        assert_eq!(quote_args(&v(&[r"C:\dir\"])), r"C:\dir\");
+        // 一旦要加引号，结尾反斜杠必须翻倍，否则会把收尾引号转义掉
+        assert_eq!(quote_args(&v(&[r"C:\my dir\"])), r#""C:\my dir\\""#);
+        // 参数里的引号要转义
+        assert_eq!(quote_args(&v(&[r#"a"b"#])), r#""a\"b""#);
     }
 }

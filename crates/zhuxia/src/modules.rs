@@ -48,6 +48,9 @@ pub fn install() {
     capture::set_upload_hook(|| zx_core::cfg::cfg().imgbed().enabled, imgbed::upload_png);
     imgbed::start();
 
+    // OCR 的翻译 / AI 整理：截图库只留两个函数指针，网络在这边做（同一套 WinHTTP）。
+    crate::ocr_ai::install();
+
     zx_core::log::info(
         "已装载模块：taskmon（任务栏系统监视）、clipboard（剪贴板历史）、capture（截图贴图）、gesture（鼠标手势）、imgconv（图片格式转换）、appicon（图标提取）、imgbed（多平台图床：GitHub / S3 / WebDAV / 自定义 HTTP）",
     );

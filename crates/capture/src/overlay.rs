@@ -19,7 +19,7 @@
 
 use std::cell::Cell;
 use std::sync::atomic::{AtomicIsize, Ordering};
-use std::sync::OnceLock;
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Instant;
 
 use windows::core::PCWSTR;
@@ -32,7 +32,7 @@ use windows::Win32::System::Threading::AttachThreadInput;
 use windows::Win32::UI::HiDpi::GetDpiForWindow;
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     GetKeyState, ReleaseCapture, SetCapture, SetFocus, VK_CONTROL, VK_DELETE, VK_DOWN,
-    VK_ESCAPE, VK_LEFT, VK_RETURN, VK_RIGHT, VK_SHIFT, VK_UP,
+    VK_ESCAPE, VK_LEFT, VK_RETURN, VK_RIGHT, VK_SHIFT, VK_TAB, VK_UP,
 };
 use windows::Win32::UI::WindowsAndMessaging::*;
 use zx_core::RecordFormat;
@@ -52,14 +52,19 @@ use crate::stitch;
 use crate::style;
 use crate::stylepanel;
 use crate::target::{self, Target};
+use crate::uielem::{self, Element};
 
 const CLASS: &str = "ZhuxiaCaptureOverlay";
 const TEXT_CLASS: &str = "ZhuxiaCaptureText";
 const WM_TEXT_COMMIT: u32 = WM_APP + 81;
 const WM_TEXT_CANCEL: u32 = WM_APP + 82;
+/// UIA 元素快照到位（后台线程通知覆盖层重画一次）
+const WM_ELEMS_READY: u32 = WM_APP + 84;
 pub const WM_STYLE_CHANGED: u32 = WM_APP + 83;
 
 const BG_DIM: u32 = 0x9900_0000;
+/// 悬停预览时的压暗强度（比确定选区的 60% 轻，得让人看清下面的内容）
+const HOVER_DIM: u32 = 0x5900_0000;
 const ACCENT: u32 = 0xFF2E90FA;
 const EDITOR_BG: u32 = 0xFF141414;
 /// 工具条分组竖线占位：1px 线 + 左右各 4px。
@@ -140,6 +145,17 @@ enum Act {
     Cancel,
 }
 
+/// 悬停气泡上的小按钮。和工具条的 `Act` 分开：它只活在"光标压着一个元素"的时候。
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Chip {
+    /// 复制元素的文本（UIA 的 Name，已经洗干净）
+    CopyText,
+    /// 复制元素的类型/名称/矩形，一行制表符分隔，方便贴进 issue 或表格
+    CopyInfo,
+    /// 把元素框里的像素原样存成 PNG（图标提取最常用）
+    SaveIcon,
+}
+
 struct Ov {
     hwnd: HWND,
     vx: i32,
@@ -162,6 +178,10 @@ struct Ov {
     sel: RECT,
     chain: Vec<Target>,
     level: usize,
+    /// 悬停链第 0 层如果是 UI 元素就放这里（窗口/显示器那一层没有）
+    hover_elem: Option<Element>,
+    /// 上一次记过日志的悬停结果（true=命中元素）。只在翻转时打一行，排除刷屏。
+    hover_log: Option<bool>,
     last_detect: Instant,
     last_key: (i32, i32),
     drag_move: Option<(i32, i32)>,
@@ -188,11 +208,20 @@ struct Ov {
     text_font: isize,
     text_pos: (i32, i32),
     toolbar: Vec<(RECT, Act)>,
+    /// 悬停气泡上的小按钮命中区（每帧重算）
+    chips: Vec<(RECT, Chip)>,
+    /// 刚复制过的那个按钮，1.2 秒内显示"已复制"
+    chip_flash: Option<(Chip, Instant)>,
     hidden_pins: Vec<HWND>,
     /// 这两项在截图期间不会变（改设置要重启会话），缓存下来避免每次鼠标移动
     /// 都从 settings.yaml 的内存副本里深度拷贝一遍 Settings。
     magnifier: bool,
     detect_window: bool,
+    /// 元素层开关。PixPin 的 Tab：在"只认窗口"和"识别元素"之间切；这里同义。
+    elements_on: bool,
+    /// UIA 元素快照（截图开始前另一条线程采）。空数组 = 还没到或这个窗口没有 a11y。
+    /// 悬停时它比"窗口/子窗口"更细一层，是选区阶段最常用的落点。
+    elems: Arc<Mutex<Vec<Element>>>,
     /// 刚刚复制过的颜色值（放大镜信息条上闪一下，1 秒后自动消失）
     color_flash: Option<String>,
     /// 本次会话的设计 token（读注册表取浅色/深色，每帧查太贵，开会话时定一次）
@@ -297,12 +326,16 @@ fn spawn_overlay(frame: Option<Frame>, doc: Option<Canvas>, hidden: Vec<HWND>,
             )
         },
     };
+    // UIA 元素快照得赶在覆盖层出现之前把目标窗口句柄定下来：覆盖层一旦显示，
+    // 它就是前台窗口，再查就查到自己头上了。真正的遍历丢给后台线程，不拖慢选区。
+    let pending = start_element_snapshot(stage == Stage::Choosing);
     let Some(hwnd) = create_window(CLASS, "驻匣 · 截图", WS_POPUP,
                                    WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW, vw, vh) else {
         zx_core::log::warn("截图失败：选区窗口创建失败");
         pin::restore(hidden);
         return false;
     };
+    spawn_element_worker(&pending, hwnd);
     let dpi = unsafe {
         let d = GetDpiForWindow(hwnd);
         if d == 0 { 96 } else { d }
@@ -327,6 +360,8 @@ fn spawn_overlay(frame: Option<Frame>, doc: Option<Canvas>, hidden: Vec<HWND>,
         sel: RECT { left: 0, top: 0, right: 0, bottom: 0 },
         chain: Vec::new(),
         level: 0,
+        hover_elem: None,
+        hover_log: None,
         last_detect: Instant::now() - std::time::Duration::from_secs(1),
         last_key: (0, 0),
         drag_move: None,
@@ -349,9 +384,13 @@ fn spawn_overlay(frame: Option<Frame>, doc: Option<Canvas>, hidden: Vec<HWND>,
         text_font: 0,
         text_pos: (0, 0),
         toolbar: Vec::new(),
+        chips: Vec::new(),
+        chip_flash: None,
         hidden_pins: hidden,
         magnifier: c.magnifier,
         detect_window: c.detect_window,
+        elements_on: c.detect_window,
+        elems: pending.slot,
         color_flash: None,
         tk: design::tokens(),
     });
@@ -437,6 +476,58 @@ fn spawn_overlay(frame: Option<Frame>, doc: Option<Canvas>, hidden: Vec<HWND>,
     true
 }
 
+/// 起一条后台线程采 UIA 元素，采到就写进共享数组，并让覆盖层重画一次。
+///
+/// 不同步采：一个浏览器窗口要走几百毫秒，Alt+A 会明显顿一下。早到早用，晚到就
+/// 当作这次没有元素——降级路径本来就只有"窗口轮廓 + 子窗口"，体验不会坏。
+struct PendingElems {
+    slot: Arc<Mutex<Vec<Element>>>,
+    /// 要采的窗口句柄（isize）。必须在覆盖层创建之前定下来——之后前台就是覆盖层自己了。
+    ///
+    /// 不止前台一个：还有光标底下那个和任务栏族。`Shell_TrayWnd` 永远不是前台窗口，
+    /// 只采前台的话，识别任务栏在架构上就不可能成立。
+    targets: Vec<isize>,
+}
+
+fn start_element_snapshot(active: bool) -> PendingElems {
+    let slot: Arc<Mutex<Vec<Element>>> = Arc::new(Mutex::new(Vec::new()));
+    let targets = if active && crate::cfg().detect_window {
+        uielem::capture_targets()
+    } else {
+        Vec::new()
+    };
+    if !targets.is_empty() {
+        zx_core::log::info(format!("UIA 目标窗口 {} 个", targets.len()));
+    } else if active && crate::cfg().detect_window {
+        zx_core::log::warn("UIA 目标窗口为空：capture_targets 没拿到任何句柄");
+    }
+    PendingElems { slot, targets }
+}
+
+fn spawn_element_worker(p: &PendingElems, hwnd: HWND) {
+    if p.targets.is_empty() {
+        return;
+    }
+    let targets = p.targets.clone();
+    let out = Arc::clone(&p.slot);
+    // HWND 不实现 Send，线程里只传 isize 再还原。
+    let mine = hwnd.0 as isize;
+    let _ = std::thread::Builder::new()
+        .name("zx-uia-snap".into())
+        .spawn(move || {
+            let elems = uielem::snapshot_targets(&targets, std::time::Duration::from_millis(2500));
+            if !elems.is_empty() {
+                zx_core::log::info(format!("UI 元素快照 {} 个", elems.len()));
+            }
+            if let Ok(mut g) = out.lock() {
+                *g = elems;
+            }
+            // 快照到位就重画一次，否则用户得先抖一下鼠标才看得到元素框。
+            let me = HWND(mine as *mut std::ffi::c_void);
+            unsafe { let _ = PostMessageW(me, WM_ELEMS_READY, WPARAM(0), LPARAM(0)); }
+        });
+}
+
 /// `SetForegroundWindow` 在"用户刚在别的程序里"时会被系统拒绝。
 /// 把自己挂到前台线程的输入队列上再抢前台，是这类工具的标准解法。
 fn force_foreground(hwnd: HWND) {
@@ -487,6 +578,17 @@ fn close() {
     let rec = pending_record().lock().map(|mut g| g.take()).unwrap_or(None);
     if let Some((rect, forced)) = rec {
         record::run_with(record::source::Rect::from(rect), forced);
+    }
+}
+
+/// 悬停气泡上的动作文案；刚复制过就显示"已复制"。
+fn chip_label(c: Chip, done: bool) -> &'static str {
+    match (c, done) {
+        (Chip::SaveIcon, true) => "已保存",
+        (_, true) => "已复制",
+        (Chip::CopyText, _) => "复制文本",
+        (Chip::CopyInfo, _) => "复制信息",
+        (Chip::SaveIcon, _) => "存图标",
     }
 }
 
@@ -584,6 +686,7 @@ impl Ov {
     fn detect(&mut self, force: bool) {
         if !self.detect_window {
             self.chain.clear();
+            self.hover_elem = None;
             return;
         }
         let moved = (self.cursor.0 - self.last_key.0).abs() + (self.cursor.1 - self.last_key.1).abs() > 1;
@@ -595,13 +698,76 @@ impl Ov {
         }
         self.last_detect = Instant::now();
         self.last_key = self.cursor;
-        let chain = target::chain_at(self.cursor.0, self.cursor.1, std::process::id());
+        // 链的第一层是 UIA 元素（如果光标下正好有一个），后面才是子窗口 → 顶层
+        // 窗口 → 显示器。滚轮切层级的老逻辑不用改，只是多了一档更细的。
+        // 光标上的层级链：[命中的元素, 它所在的块]。再往上交给窗口链。
+        let stack = if self.elements_on {
+            match self.elems.try_lock() {
+                Ok(g) => uielem::stack_at(&g, self.cursor.0, self.cursor.1),
+                Err(_) => Vec::new(),
+            }
+        } else {
+            Vec::new()
+        };
+        let mut chain: Vec<Target> = Vec::new();
+        for e in &stack {
+            chain.push(Target { rect: e.to_rect(), label: e.label() });
+        }
+        chain.extend(target::chain_at(self.cursor.0, self.cursor.1, std::process::id()));
+        self.hover_elem = stack.first().cloned();
         if chain.len() != self.chain.len() {
+            // 默认停在最小元素上，往上滚才是"包含它的更大元素"——和 PixPin 一致：
+            // 先精准，需要更大的范围再滚。
             self.level = 0;
         }
         self.chain = chain;
         if self.level >= self.chain.len() {
             self.level = self.chain.len().saturating_sub(1);
+        }
+        // 悬停结果只在翻转时记一行：截图一次最多两行，但足够区分"快照有元素却没命中"
+        // 和"命中窗口"这两种完全不同的毛病。
+        let hit = self.hover_elem.is_some();
+        if self.hover_log != Some(hit) {
+            self.hover_log = Some(hit);
+            // 打的是"当前显示的这一层"（chain[level]），不是最小元素——
+            // 排查时用户看到的是哪个框，日志就该是哪个。
+            let layers: Vec<String> = self
+                .chain
+                .iter()
+                .map(|t| {
+                    format!(
+                        "{}[{}x{}]",
+                        t.label,
+                        t.rect.right - t.rect.left,
+                        t.rect.bottom - t.rect.top
+                    )
+                })
+                .collect();
+            zx_core::log::info(format!("层级链 {} 层：{}", layers.len(), layers.join(" > ")));
+            match self.chain.get(self.level) {
+                Some(t) => zx_core::log::info(format!(
+                    "悬停→{} {}x{} @{},{}（光标 {},{}，第 {}/{} 层）",
+                    t.label,
+                    t.rect.right - t.rect.left,
+                    t.rect.bottom - t.rect.top,
+                    t.rect.left,
+                    t.rect.top,
+                    self.cursor.0,
+                    self.cursor.1,
+                    self.level + 1,
+                    self.chain.len()
+                )),
+                None => {
+                    let n = match self.elems.try_lock() {
+                        Ok(g) => g.len().to_string(),
+                        Err(_) => "取不到".into(),
+                    };
+                    zx_core::log::info(format!(
+                        "悬停→窗口（快照 {n} 个，光标 {},{}）",
+                        self.cursor.0, self.cursor.1
+                    ));
+                }
+            }
         }
     }
 
@@ -615,13 +781,13 @@ impl Ov {
 
     // ------------------------------------------------------------ 绘制
 
-    fn dim_outside(&mut self, r: RECT) {
+    fn dim_outside(&mut self, r: RECT, color: u32) {
         let (l, t) = (r.left - self.vx, r.top - self.vy);
         let (rr, b) = (r.right - self.vx, r.bottom - self.vy);
-        self.canvas.fill_rect(0.0, 0.0, self.vw as f32, t as f32, BG_DIM);
-        self.canvas.fill_rect(0.0, b as f32, self.vw as f32, (self.vh - b) as f32, BG_DIM);
-        self.canvas.fill_rect(0.0, t as f32, l as f32, (b - t) as f32, BG_DIM);
-        self.canvas.fill_rect(rr as f32, t as f32, (self.vw - rr) as f32, (b - t) as f32, BG_DIM);
+        self.canvas.fill_rect(0.0, 0.0, self.vw as f32, t as f32, color);
+        self.canvas.fill_rect(0.0, b as f32, self.vw as f32, (self.vh - b) as f32, color);
+        self.canvas.fill_rect(0.0, t as f32, l as f32, (b - t) as f32, color);
+        self.canvas.fill_rect(rr as f32, t as f32, (self.vw - rr) as f32, (b - t) as f32, color);
     }
 
     fn paint(&mut self) {
@@ -632,6 +798,7 @@ impl Ov {
             self.canvas.clear(EDITOR_BG);
         }
         self.toolbar.clear();
+        self.chips.clear();
         self.palette.clear();
 
         match self.stage {
@@ -652,31 +819,77 @@ impl Ov {
             || (self.stage == Stage::Dragging && self.sel_ok());
 
         if selected {
-            self.dim_outside(self.sel);
+            self.dim_outside(self.sel, BG_DIM);
+        }
+
+        // 放大镜先画：它跟着光标走，正好压在"元素气泡"的位置上（任务栏这种贴底的
+        // 元素，气泡只能往上放）。气泡是用户这一刻最需要读的东西，不能被它盖住。
+        if self.magnifier {
+            self.paint_magnifier(s);
         }
 
         if self.stage == Stage::Choosing {
             if let Some(r) = self.hover_rect() {
+                // 整屏压暗、只留这一块亮——这是截图工具里"选中"最直观的表达，
+                // 光描边框在浅色背景上根本不够看（用户反馈"不够明显"）。
+                // 悬停用 35%，确定选区才用 60%：悬停是"预览"，太黑会看不见自己要框的东西。
+                self.dim_outside(r, HOVER_DIM);
                 let (x, y) = ((r.left - self.vx) as f32, (r.top - self.vy) as f32);
                 let (w, h) = ((r.right - r.left) as f32, (r.bottom - r.top) as f32);
-                self.canvas.stroke_round(x, y, w, h, 4.0 * s, 2.0 * s, ACCENT);
+                // 高亮：淡淡铺一层 + 半透明黑打底 + 加粗蓝线。
+                // 单画 2px 蓝线在浅色/花哨背景上几乎看不见（用户反馈"不够明显"）。
+                self.canvas
+                    .fill_round(x, y, w, h, 4.0 * s, 0x1A2E90FA);
+                self.canvas.stroke_round(
+                    x - 1.5 * s,
+                    y - 1.5 * s,
+                    w + 3.0 * s,
+                    h + 3.0 * s,
+                    5.5 * s,
+                    1.5 * s,
+                    0x99000000,
+                );
+                self.canvas
+                    .stroke_round(x, y, w, h, 4.0 * s, 3.0 * s, ACCENT);
 
+                let elem = self.hover_elem.clone();
                 if let Some(target) = self.hover_target() {
+                    // 被配额截断时明说一句：否则用户看到的是"框不上去"，会以为程序坏了。
+                    let cut = if uielem::last_truncated() { "   · 结构已截断" } else { "" };
                     let label = format!(
-                        "{}   {} × {}",
+                        "{}   {} × {}{cut}",
                         target.label,
                         r.right - r.left,
                         r.bottom - r.top
                     );
-                    let lw = self.canvas.measure(&label, 11.5 * s, false) + 16.0 * s;
+                    // 光标压着元素时，气泡右侧再接两个动作。复制完的 1.2 秒里
+                    // 那一格显示"已复制"，不用弹提示，视线本来就在这儿。
+                    let flash = self
+                        .chip_flash
+                        .filter(|(_, t)| t.elapsed().as_millis() < 1200)
+                        .map(|(c, _)| c);
+                    let chips: Vec<(Chip, &'static str)> = if elem.is_some() {
+                        [Chip::CopyText, Chip::CopyInfo, Chip::SaveIcon]
+                            .into_iter()
+                            .map(|c| (c, chip_label(c, flash == Some(c))))
+                            .collect()
+                    } else {
+                        Vec::new()
+                    };
+                    let lw = self.canvas.measure(&label, 11.5 * s, false) + 20.0 * s;
+                    let seg_w: Vec<f32> = chips
+                        .iter()
+                        .map(|(_, t)| self.canvas.measure(t, 11.5 * s, false) + 30.0 * s)
+                        .collect();
+                    let total = lw + seg_w.iter().sum::<f32>();
                     let lh = 24.0 * s;
-                    let lx = (x + 6.0 * s).min(self.vw as f32 - lw - 6.0 * s);
+                    let lx = (x + 6.0 * s).min((self.vw as f32 - total - 6.0 * s).max(6.0 * s));
                     let ly = if y - lh - 6.0 * s > 0.0 {
                         y - lh - 6.0 * s
                     } else {
                         y + 6.0 * s
                     };
-                    design::bubble(&mut self.canvas, lx, ly, lw, lh, &tk, s);
+                    design::bubble(&mut self.canvas, lx, ly, total, lh, &tk, s);
                     design::text(
                         &mut self.canvas,
                         &label,
@@ -690,6 +903,40 @@ impl Ov {
                         zx_ui::VAlign::Center,
                         500,
                     );
+                    let mut cx = lx + lw;
+                    for ((chip, text), sw) in chips.iter().copied().zip(seg_w.iter().copied()) {
+                        design::divider(
+                            &mut self.canvas,
+                            cx,
+                            ly + 5.0 * s,
+                            lh - 10.0 * s,
+                            &tk,
+                            s,
+                        );
+                        design::text(
+                            &mut self.canvas,
+                            text,
+                            cx + 10.0 * s,
+                            ly,
+                            sw - 20.0 * s,
+                            lh,
+                            11.5 * s,
+                            tk.bubble_text,
+                            zx_ui::TextAlign::Near,
+                            zx_ui::VAlign::Center,
+                            500,
+                        );
+                        self.chips.push((
+                            RECT {
+                                left: (cx + self.vx as f32) as i32,
+                                top: (ly + self.vy as f32) as i32,
+                                right: (cx + sw + self.vx as f32) as i32,
+                                bottom: (ly + lh + self.vy as f32) as i32,
+                            },
+                            chip,
+                        ));
+                        cx += sw;
+                    }
                 }
             }
         }
@@ -751,14 +998,11 @@ impl Ov {
         if self.stage == Stage::Choosing {
             self.paint_hint(s);
         }
-        if self.magnifier {
-            self.paint_magnifier(s);
-        }
     }
 
     fn paint_edit(&mut self, s: f32) {
         let r = self.doc_rect();
-        self.dim_outside(r);
+        self.dim_outside(r, BG_DIM);
 
         if let Some(doc) = self.doc.take() {
             self.canvas.draw_canvas(
@@ -831,9 +1075,14 @@ impl Ov {
                 "拖动调整 · 方向键微调 · Enter 标注 · Ctrl+L 长截图{pick} · Esc 返回"
             ),
             _ if self.chain.is_empty() => {
-                format!("拖动框选区域 · 单击窗口{pick} · Esc 退出")
+                format!("拖动框选区域 · 单击控件{pick} · Esc 退出")
             }
-            _ => format!("拖动框选 · 单击窗口 · 滚轮切换层级{pick} · Esc 退出"),
+            _ => format!("拖动框选 · 单击控件 · 滚轮切层级 · Tab 只认窗口{pick} · Esc 退出"),
+        };
+        // 元素识别因为反复卡死被停用时必须说出来，否则用户只会觉得"悬停没反应"
+        let text = match uielem::unavailable_note() {
+            Some(n) if self.elements_on => format!("{text} · {n}"),
+            _ => text,
         };
         let w = (self.canvas.measure(&text, 11.5 * s, false) + 24.0 * s)
             .min(self.vw as f32 - 12.0 * s);
@@ -1626,6 +1875,8 @@ impl Ov {
         let Some(doc) = self.doc.take() else { return };
         unsafe { let _ = SetCursor(LoadCursorW(None, IDC_WAIT).unwrap_or_default()); }
         let result = ocr::recognize(&doc);
+        // 结果窗口要留一份原图像素：表格识别得重新跑 det，只有文本是不够的。
+        let px = Some((doc.w, doc.h, doc.pixels().to_vec()));
         self.doc = Some(doc);
         unsafe { let _ = SetCursor(LoadCursorW(None, IDC_ARROW).unwrap_or_default()); }
         let mut pt = POINT::default();
@@ -1633,11 +1884,11 @@ impl Ov {
         match result {
             Ok(text) => {
                 zx_core::log::info(format!("OCR 完成，{} 字", text.chars().count()));
-                ocr::show(text, pt);
+                ocr::show(text, px, pt);
             }
             Err(e) => {
                 zx_core::log::warn(format!("OCR 失败：{e}"));
-                ocr::show(e, pt);
+                ocr::show(e, px, pt);
             }
         }
     }
@@ -1743,6 +1994,63 @@ impl Ov {
         *pending_record().lock().unwrap_or_else(|p| p.into_inner()) = Some((self.sel, forced));
         self.mode = if forced == Some(RecordFormat::Gif) { Mode::RecordGif } else { Mode::Record };
         self.close_soon();
+    }
+
+    /// 悬停气泡上的动作：复制元素文本 / 元素信息。
+    ///
+    /// 只读 UIA 的 Name——它就是这个控件的标题文本，比 OCR 可靠得多（见 uielem 的
+    /// `pick_text`）。名字是空的（纯图标那种）就没什么可复制的，什么都不做。
+    fn run_chip(&mut self, chip: Chip) {
+        let Some(el) = self.hover_elem.clone() else {
+            return;
+        };
+        let payload = match chip {
+            Chip::CopyText => Some(el.name.clone()),
+            Chip::CopyInfo => Some(el.info_line()),
+            Chip::SaveIcon => None,
+        };
+        let ok = match payload {
+            Some(text) => {
+                if text.trim().is_empty() {
+                    zx_core::log::info("这个元素没有名称，没有可复制的文本");
+                    return;
+                }
+                crate::copy_text(&text)
+            }
+            None => self.save_icon(&el),
+        };
+        if ok {
+            self.chip_flash = Some((chip, Instant::now()));
+            zx_core::log::info(format!("{}：{}", chip_label(chip, false), el.label()));
+        }
+    }
+
+    /// 把元素框里的像素原样存成 PNG。
+    ///
+    /// 从**冻结帧**裁，不从编辑后的图裁：元素框就是屏幕上的物理像素，1:1 才叫"存图标"。
+    /// 文件名 `图标_<名字>_<时间戳>.png`，名字里 Windows 不认的字符由 `output::safe_stem` 洗掉。
+    fn save_icon(&self, el: &Element) -> bool {
+        let Some(frame) = self.frame.as_ref() else {
+            return false;
+        };
+        let Some(canvas) = output::crop(frame, el.to_rect()) else {
+            zx_core::log::warn("存图标失败：元素框裁不出来（可能已滚出屏幕）");
+            return false;
+        };
+        let c = crate::cfg();
+        let name = output::safe_stem(&el.name, 24);
+        let prefix = if name.is_empty() {
+            "图标".to_string()
+        } else {
+            format!("图标_{name}")
+        };
+        match output::save_png_as(&canvas, &c.save_dir, &prefix) {
+            Some(p) => {
+                zx_core::log::info(format!("已存图标 {}×{}：{}", el.rect.w, el.rect.h, p.display()));
+                true
+            }
+            None => false,
+        }
     }
 
     fn run(&mut self, act: Act) {
@@ -1996,6 +2304,18 @@ impl Ov {
         self.cursor = self.cursor_in(l);
         self.width_edit = None;
         self.close_text(true);
+        // 悬停气泡上的小按钮优先于"开始框选"：点在"复制文本"上不能顺手拉出一个新框。
+        let hit = self
+            .chips
+            .iter()
+            .find(|(rc, _)| target::hit(rc, self.cursor.0, self.cursor.1))
+            .map(|(_, c)| *c);
+        if let Some(chip) = hit {
+            self.run_chip(chip);
+            self.paint();
+            self.refresh_cursor();
+            return None;
+        }
         let req = match self.stage {
             Stage::Choosing | Stage::Dragging | Stage::Selected => {
                 self.begin_selection(hwnd);
@@ -2380,9 +2700,30 @@ impl Ov {
             self.close_soon();
             return false;
         }
+        // Tab：在"识别元素"和"只认窗口"之间切（PixPin 文档里的同款操作）。
+        if key == VK_TAB.0 && self.stage == Stage::Choosing {
+            self.elements_on = !self.elements_on;
+            self.hover_log = None;
+            self.detect(true);
+            zx_core::log::info(format!(
+                "元素检测：{}",
+                if self.elements_on { "开" } else { "只认窗口" }
+            ));
+            return true;
+        }
         if key == VK_RETURN.0 {
             if self.stage == Stage::Selected && self.sel_ok() {
                 self.enter_editing(self.sel);
+                return true;
+            }
+            // 没拖动也能进：光标下那个元素直接当选区，和单击同一个语义。
+            if self.stage == Stage::Choosing {
+                if let Some(r) = self.hover_rect() {
+                    self.sel = r;
+                    self.trace_stage("Enter 取元素");
+                    self.enter_editing(r);
+                    return false;
+                }
             }
             return true;
         }
@@ -2511,6 +2852,20 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) ->
 unsafe fn wndproc_inner(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -> LRESULT {
 
     match msg {
+        WM_ELEMS_READY => {
+            // 元素快照晚到了：重算一次悬停链并重画，别让用户先抖鼠标才看见框。
+            with_ov(|o| {
+                let n = match o.elems.try_lock() {
+                    Ok(g) => g.len().to_string(),
+                    Err(_) => "锁被占".into(),
+                };
+                zx_core::log::info(format!("元素到位：覆盖层看到 {n} 个，重新命中"));
+                o.hover_log = None;
+                o.detect(true);
+                o.paint();
+            });
+            LRESULT(0)
+        }
         WM_MOUSEMOVE => {
             with_ov(|o| o.on_move(l));
             LRESULT(0)

@@ -8,7 +8,6 @@ license.workspace = true
 zx-core.workspace = true
 zx-ui.workspace = true
 serde.workspace = true
-serde_json.workspace = true
 # GIF 容器 + LZW。默认 feature 会带 color_quant（NeuQuant），我们用自写的中位切分，
 # 用不上它，关掉能少编一个 crate。（若某些 API 需要默认 feature，去掉 default-features 即可。）
 gif = { version = "0.14", default-features = false, features = ["std"] }
@@ -31,6 +30,7 @@ features = [
   "Win32_System_WinRT_Graphics_Capture",
   "Win32_UI_WindowsAndMessaging",
   "Win32_UI_Input_KeyboardAndMouse",
+  "Win32_UI_Accessibility",
   "Win32_UI_HiDpi",
   "Win32_UI_Shell",
   "Win32_System_Com",

@@ -17,6 +17,7 @@ use windows::Win32::UI::Shell::*;
 use windows::Win32::UI::WindowsAndMessaging::*;
 
 use crate::rules;
+use zx_core::win::wide;
 
 pub const CF_UNICODETEXT: u32 = 13;
 pub const CF_BITMAP: u32 = 2;
@@ -41,10 +42,6 @@ pub fn set_paused(p: bool) {
 }
 pub fn paused() -> bool {
     PAUSED.load(Ordering::Relaxed)
-}
-
-fn wide(s: &str) -> Vec<u16> {
-    s.encode_utf16().chain(std::iter::once(0)).collect()
 }
 
 fn now_ms() -> i64 {

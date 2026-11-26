@@ -150,6 +150,54 @@ impl Github {
     fn ref_path(&self, branch: &str) -> String {
         format!("{}/git/ref/heads/{}", self.repo_path(), link::encode_path(branch))
     }
+
+    /// 第 `page` 页的请求路径（目录多一层 `contents/{path}`）。
+    fn entries_path(&self, dir: &str, branch: &str, page: u32) -> String {
+        let base = if dir.is_empty() { self.repo_path() + "/contents" } else { self.content_path(dir) };
+        format!("{base}?ref={}&per_page={PER_PAGE}&page={page}", link::encode(branch))
+    }
+
+    /// 列一个目录的全部条目，**自动翻页**。
+    ///
+    /// GitHub Contents API 单请求最多给 1000 条，超出部分静默截断——图片平铺在一个
+    /// 目录里时，界面只会显示前 1000 张，用户没法判断"是真没有还是没拿到"。
+    /// 这里按 `per_page=100` 翻到不满一页为止；真撞上 1000 的硬上限会记一条 warn。
+    fn list_entries(&self, dir: &str) -> Result<Vec<Value>, Fail> {
+        let branch = self.branch_name()?;
+        let mut out: Vec<Value> = Vec::new();
+        for page in 1..=PAGES_MAX {
+            let path = self.entries_path(dir, &branch, page as u32);
+            let v = match self.call("GET", &path, None) {
+                Ok(v) => v,
+                // 目录不存在 = 空目录，不是错误
+                Err(e) if e.stage == "目标不存在" => return Ok(out),
+                Err(e) => return Err(e),
+            };
+            let Some(arr) = v.as_array() else { return Ok(out) };
+            let got = arr.len();
+            out.extend(arr.iter().cloned());
+            if !has_more(got, out.len()) {
+                return Ok(out);
+            }
+        }
+        zx_core::log::warn(format!(
+            "GitHub 目录 {dir:?} 条目达到 API 上限 {}，超出部分列不出来；建议按年月分目录",
+            PER_PAGE * PAGES_MAX
+        ));
+        Ok(out)
+    }
+}
+
+/// 每页条数。Contents API 单请求最多 1000 条，取 100 便于翻页。
+const PER_PAGE: usize = 100;
+/// 最多翻这么多页（GitHub Contents API 的硬上限就是 1000 条）。
+const PAGES_MAX: usize = 10;
+
+/// 这一页收完还要不要继续翻。
+///
+/// 不满一页说明到底了；收满上限就别再请求，API 也不会给更多。
+fn has_more(got: usize, total: usize) -> bool {
+    got >= PER_PAGE && total < PER_PAGE * PAGES_MAX
 }
 
 fn short(s: &str) -> String {
@@ -222,15 +270,10 @@ impl Backend for Github {
         Ok(Uploaded { path: path.clone(), url: self.url(&path)? })
     }
 
+
     fn list_dirs(&self, dir: &str) -> Result<Vec<String>, Fail> {
-        let path = if dir.is_empty() { self.repo_path() + "/contents" } else { self.content_path(dir) };
-        let v = match self.call("GET", &format!("{path}?ref={}", link::encode(&self.branch_name()?)), None) {
-            Ok(v) => v,
-            Err(e) if e.stage == "目标不存在" => return Ok(Vec::new()),
-            Err(e) => return Err(e),
-        };
-        let Some(arr) = v.as_array() else { return Ok(Vec::new()) };
-        Ok(arr
+        Ok(self
+            .list_entries(dir)?
             .iter()
             .filter(|e| e.get("type").and_then(|t| t.as_str()) == Some("dir"))
             .filter_map(|e| e.get("name").and_then(|n| n.as_str()).map(|s| s.to_string()))
@@ -238,15 +281,9 @@ impl Backend for Github {
     }
 
     fn list_images(&self, dir: &str) -> Result<Vec<RemoteImage>, Fail> {
-        let path = if dir.is_empty() { self.repo_path() + "/contents" } else { self.content_path(dir) };
-        let v = match self.call("GET", &format!("{path}?ref={}", link::encode(&self.branch_name()?)), None) {
-            Ok(v) => v,
-            Err(e) if e.stage == "目标不存在" => return Ok(Vec::new()),
-            Err(e) => return Err(e),
-        };
-        let Some(arr) = v.as_array() else { return Ok(Vec::new()) };
+        let entries = self.list_entries(dir)?;
         let mut out = Vec::new();
-        for e in arr {
+        for e in &entries {
             if e.get("type").and_then(|t| t.as_str()) != Some("file") {
                 continue;
             }
@@ -310,5 +347,38 @@ mod tests {
     fn image_detection() {
         assert!(is_image("a/B.PNG"));
         assert!(!is_image("a/readme.md"));
+    }
+
+    fn fake() -> Github {
+        Github {
+            cfg: Cfg { owner: "o".into(), repo: "r".into(), branch: "dev".into(), ..Cfg::default() },
+            token: "t".into(),
+            proxy: String::new(),
+            branch_cache: OnceLock::new(),
+        }
+    }
+
+    // 目录浏览必须翻页：单请求最多 1000 条，不翻页就是静默丢数据。
+    #[test]
+    fn entries_path_carries_paging_params() {
+        let g = fake();
+        let p1 = g.entries_path("", "dev", 1);
+        assert!(p1.starts_with("/repos/o/r/contents?"), "{p1}");
+        assert!(p1.contains("ref=dev"), "{p1}");
+        assert!(p1.contains("per_page=100"), "{p1}");
+        assert!(p1.contains("page=1"), "{p1}");
+        // 子目录要走 contents/{path}，且 path 段要编码
+        let p2 = g.entries_path("2026/11", "dev", 3);
+        assert!(p2.starts_with("/repos/o/r/contents/2026/11?"), "{p2}");
+        assert!(p2.contains("page=3"), "{p2}");
+    }
+
+    #[test]
+    fn paging_stops_on_short_page_or_at_cap() {
+        assert!(has_more(PER_PAGE, PER_PAGE), "满页继续翻");
+        assert!(!has_more(PER_PAGE - 1, PER_PAGE), "不满一页就是到底了");
+        assert!(!has_more(0, 0));
+        let cap = PER_PAGE * PAGES_MAX;
+        assert!(!has_more(PER_PAGE, cap), "到上限不再请求，API 也不会给更多");
     }
 }

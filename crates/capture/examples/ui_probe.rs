@@ -47,7 +47,7 @@ fn main() {
                  OCR 常见错字：巳 → 已，木 → 术。"
                     .into()
             });
-            capture::ocr::show(text, POINT { x: 400, y: 200 });
+            capture::ocr::show(text, None, POINT { x: 400, y: 200 });
             pump(700);
             grab_to(&out);
             // 端到端确认正文真的是「可编辑」的：往输入框里打一个字，再读回来

@@ -26,6 +26,10 @@ pub struct Frame {
 }
 
 // 只在抓屏线程内使用，不跨线程共享。
+// SAFETY: `Frame` 里是 HDC + 一块 DIB 像素指针。它只在抓屏的那一个线程里
+// 创建、读取、释放（`grab_*` 返回后由调用方用完即弃）。`Send` 是为了能放进
+// 需要 `Send` 的容器；**不要**把同一个 `Frame` 挪到另一个线程去读——DC 是
+// 创建线程的，`DeleteDC` 也在 Drop 里。
 unsafe impl Send for Frame {}
 
 struct Dib {

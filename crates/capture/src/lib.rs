@@ -14,6 +14,7 @@ pub mod design;
 pub mod hotkeys;
 pub mod longshot;
 pub mod ocr;
+pub mod ocr_ai;
 pub mod ocr_model;
 pub mod output;
 pub mod overlay;
@@ -27,6 +28,7 @@ pub mod stitch;
 pub mod style;
 pub mod stylepanel;
 pub mod target;
+pub mod uielem;
 
 use std::sync::OnceLock;
 

@@ -252,19 +252,42 @@ pub(crate) fn ib_history(q: String, provider: String, sort: String, offset: usiz
     json!({ "items": items, "total": total })
 }
 
+/// 远端浏览：一次把当前目录的**子目录**和**图片**都取回来。
+///
+/// 原来只调 `remote_images`，所以界面上永远只有根目录那一层图片——GitHub 图床
+/// 按 `{yyyy}/{MM}` 分目录上传，子目录里的东西根本进不来。目录树要能一层层点进去。
 #[tauri::command]
 pub(crate) fn ib_remote(dir: String) -> Value {
-    let supported = imgbed::metas()
+    let caps = imgbed::metas()
         .into_iter()
         .find(|m| m.id == zx_core::cfg::cfg().imgbed().provider)
-        .map(|m| m.caps.list_images)
-        .unwrap_or(false);
-    if !supported {
-        return json!({ "supported": false, "items": [] });
+        .map(|m| m.caps)
+        .unwrap_or_default();
+    if !caps.list_images {
+        return json!({ "supported": false, "dirs": [], "items": [] });
     }
-    match imgbed::remote_images(dir.trim()) {
-        Ok(items) => json!({ "supported": true, "items": items }),
-        Err(e) => json!({ "supported": true, "items": [], "error": e }),
+    let dir = dir.trim();
+    // 目录失败不该整页报错：图片照常显示，只把错误挂上去。
+    let (dirs, dir_err) = if caps.list_dirs {
+        match imgbed::remote_dirs(dir) {
+            Ok(mut d) => {
+                d.sort_by_key(|x| x.to_lowercase());
+                (d, None)
+            }
+            Err(e) => (Vec::new(), Some(e)),
+        }
+    } else {
+        (Vec::new(), None)
+    };
+    match imgbed::remote_images(dir) {
+        Ok(items) => json!({ "supported": true, "dirs": dirs, "items": items, "dirError": dir_err }),
+        Err(e) => json!({
+            "supported": true,
+            "dirs": dirs,
+            "items": [],
+            "error": e,
+            "dirError": dir_err
+        }),
     }
 }
 
@@ -297,16 +320,13 @@ pub(crate) fn ib_thumb_url(url: String) -> Value {
 
 #[tauri::command]
 pub(crate) fn ib_image(url: String) -> Value {
-    if !(url.starts_with("https://") || url.starts_with("http://")) {
-        return json!({ "ok": false, "error": "不是 http/https 链接" });
-    }
     match imgbed::image_bytes(&url) {
-        Ok(bytes) if bytes.len() <= 30 * 1024 * 1024 => {
+        Ok(bytes) => {
             use base64::Engine;
             let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
             json!({ "ok": true, "dataUrl": format!("data:{};base64,{b64}", imgbed::path::kind_of(&bytes).map(|(_, m)| m).unwrap_or("application/octet-stream")) })
         }
-        Ok(_) => json!({ "ok": false, "error": "原图超过 30 MB，请用「打开原图」" }),
+        // 超限/状态码/网络的原因由 image_bytes 给全，别再统一糊成一句话
         Err(e) => json!({ "ok": false, "error": e }),
     }
 }

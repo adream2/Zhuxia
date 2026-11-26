@@ -842,9 +842,15 @@ pub(crate) mod cursor {
 
     thread_local! {
         static CACHE: std::cell::Cell<*mut Cache> = const { std::cell::Cell::new(std::ptr::null_mut()) };
+        /// 借用计数，见 `zx_core::borrow`。
+        static BORROW: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
     }
 
-    fn cache() -> Option<&'static mut Cache> {
+    /// 取光标缓存（一个复用的 DIB + DC，画摄像头小窗时逐帧用）。
+    ///
+    /// 返回借用守卫：同一个函数里嵌套取两次会产生两个 `&mut`（UB），debug 构建
+    /// 由 `zx_core::borrow::Ref` 直接断言，不用再靠"消息循环一次只处理一条"的约定。
+    fn cache() -> Option<zx_core::borrow::Ref<Cache>> {
         CACHE.with(|c| {
             let p = c.get();
             if p.is_null() {
@@ -878,7 +884,11 @@ pub(crate) mod cursor {
                 }
             }
             let p = c.get();
-            if p.is_null() { None } else { Some(unsafe { &mut *p }) }
+            if p.is_null() {
+                None
+            } else {
+                Some(unsafe { zx_core::borrow::Ref::new(p, &BORROW, "录屏光标缓存") })
+            }
         })
     }
 

@@ -88,10 +88,10 @@ fn usable(hwnd: HWND, pt: POINT, own_pid: u32) -> bool {
         }
 
         let class = class_of(hwnd);
-        if matches!(
-            class.as_str(),
-            "Progman" | "WorkerW" | "Shell_TrayWnd" | "Shell_SecondaryTrayWnd"
-        ) {
+        // 桌面被排除（它是整屏背景，选中它没意义）；**任务栏不排除**——
+        // 用户要能像 PixPin 那样直接选中整个任务栏。之前 Shell_TrayWnd 在这张
+        // 黑名单里，所以任务栏永远进不了窗口链。
+        if matches!(class.as_str(), "Progman" | "WorkerW") {
             return false;
         }
 

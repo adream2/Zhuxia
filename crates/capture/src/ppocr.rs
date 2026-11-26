@@ -209,7 +209,7 @@ pub fn recognize(canvas: &Canvas) -> Result<String, String> {
             return Ok(String::new());
         }
         let debug = std::env::var("ZHUXIA_CAPTURE_PPOCR_DEBUG").ok().as_deref() == Some("1");
-        let mut items: Vec<(i32, i32, String)> = Vec::new();
+        let mut items: Vec<(i32, i32, i32, i32, String)> = Vec::new();
         for (bi, b) in boxes.iter().enumerate() {
             let rect = clamp_box(*b, canvas.w, canvas.h);
             if rect.2 < 2 || rect.3 < 2 {
@@ -228,7 +228,7 @@ pub fn recognize(canvas: &Canvas) -> Result<String, String> {
                 Ok(t) => {
                     let t = t.trim().to_string();
                     if !t.is_empty() {
-                        items.push((rect.1 + rect.3 / 2, rect.0, t));
+                        items.push((rect.1, rect.3, rect.0, rect.2, t));
                     }
                 }
                 Err(err) => zx_core::log::warn(format!("单行识别失败：{err}")),
@@ -238,28 +238,279 @@ pub fn recognize(canvas: &Canvas) -> Result<String, String> {
     })
 }
 
-/// 按行聚合：纵向中心接近的框拼成一行。
-fn join_lines(mut items: Vec<(i32, i32, String)>) -> String {
-    items.sort_by_key(|(y, x, _)| (*y, *x));
-    let mut out = String::new();
-    let mut last: Option<(i32, i32)> = None;
-    for (y, _x, text) in items {
-        match last {
-            Some((ly, lh)) if (y - ly).abs() <= (lh.max(12) / 2) => {
-                out.push(' ');
-                out.push_str(&text);
-            }
-            Some(_) => {
-                out.push('\n');
-                out.push_str(&text);
-            }
-            None => out.push_str(&text),
+/// 识别一个**已知矩形**里的文字（UI 元素框 / 用户框选），跳过 det。
+///
+/// 这条路径是"OCR 准"的关键：整屏识别时 [`DET_LIMIT`] 会把 4K 屏压到 1/4，
+/// 12px 的界面文字在 det 阶段就已经糊掉、框都出不来。既然元素框已经有了，
+/// 就直接裁出来送 rec——小字被放大到 48 高，准确率是另一个量级。
+///
+/// 返回 `(文本, 置信度)`。置信度在长行切段时取各段最小值（一段错，整块就算错）。
+pub fn recognize_region(
+    canvas: &Canvas,
+    rect: (i32, i32, i32, i32),
+) -> Result<(String, f32), String> {
+    if !available() {
+        return Err("PaddleOCR 模型未安装".into());
+    }
+    let (x, y, w, h) = clamp_box(rect, canvas.w, canvas.h);
+
+    // 多行元素（段落、表格单元格）：跳过 det 反而更差，裁出来走完整流程。
+    // 关键是**先裁再识别**，这样不再受整屏 960 上限的降采样影响。
+    if h as f32 > REC_H as f32 * 2.2 {
+        let Some(sub) = crate::output::crop_canvas(canvas, (x, y, w, h)) else {
+            return Err("裁切失败".into());
+        };
+        let text = recognize(&sub)?;
+        return Ok((text, 0.80));
+    }
+
+    touch();
+    with_engine(|e| {
+        // 上下留白很多的元素（按钮里的文字）不要按整个框高放大，否则字被压扁。
+        let ratio = (REC_H as f32 / h.max(1) as f32).min(6.0);
+        let full_w = (w as f32 * ratio).round().max(8.0) as i32;
+        if full_w <= REC_MAX_W {
+            return rec_segment_scored(e, canvas, (x, y, w, h), full_w.clamp(16, REC_MAX_W))
+                .map(|(t, s)| (t.trim().to_string(), s));
         }
-        last = Some((y, 20));
+        // 单行但很长（日志行、地址栏）：按 640 宽切段，段间重叠。
+        let mut text = String::new();
+        let mut worst = 1f32;
+        let mut x_src = 0i32;
+        while x_src < w {
+            let seg_src = (((REC_MAX_W as f32) / ratio).round() as i32).min(w - x_src);
+            if seg_src <= 0 {
+                break;
+            }
+            let dst_w = ((seg_src as f32 * ratio).round() as i32).clamp(16, REC_MAX_W);
+            if let Ok((t, s)) = rec_segment_scored(e, canvas, (x + x_src, y, seg_src, h), dst_w) {
+                text.push_str(&t);
+                worst = worst.min(s);
+            }
+            if x_src + seg_src >= w {
+                break;
+            }
+            let step = seg_src - REC_OVERLAP.max(2);
+            if step <= 0 {
+                break;
+            }
+            x_src += step;
+        }
+        Ok((text.trim().to_string(), worst))
+    })
+}
+
+/// 只做 det：返回整图的文本框（原图坐标）。
+///
+/// 给元素融合层用——UIA 框不到的文字（自绘 UI、图片里的字、canvas 画出来的标签）
+/// 靠这批框补上，这就是"识别范围"的兜底。
+pub fn detect_lines(canvas: &Canvas) -> Result<Vec<(i32, i32, i32, i32)>, String> {
+    if !available() {
+        return Err("PaddleOCR 模型未安装".into());
+    }
+    touch();
+    with_engine(|e| detect(e, canvas))
+}
+
+/// 按行聚合：纵向中心接近的框拼成一行。
+/// 一行文字：竖直位置 + 若干横向片段（x 升序）。
+///
+/// 表格识别和普通拼接都要"先分行"，所以这里抽出来共用。
+pub struct TextRow {
+    pub top: i32,
+    pub bottom: i32,
+    /// (x, w, 文本)
+    pub parts: Vec<(i32, i32, String)>,
+}
+
+impl TextRow {
+    pub fn text(&self) -> String {
+        let mut out = String::new();
+        for (i, (_, _, t)) in self.parts.iter().enumerate() {
+            if i > 0 {
+                out.push(' ');
+            }
+            out.push_str(t);
+        }
+        out
+    }
+}
+
+/// 把识别碎片聚成行：(top, h, x, w, text)。
+///
+/// 判定"同一行"用**垂直重叠**，不是中心点距离。之前拿固定 20px 当行高、比中心点差
+/// 10px 以内就算同一行，字号一大就散、行距一紧就并。按重叠比例判：两个框竖直方向
+/// 重叠超过较矮那个的一半，就算同一行。
+pub fn rows_of(mut items: Vec<(i32, i32, i32, i32, String)>) -> Vec<TextRow> {
+    items.sort_by_key(|(top, _, x, _, _)| (*top, *x));
+    let mut rows: Vec<TextRow> = Vec::new();
+    for (top, h, x, w, text) in items {
+        let bottom = top + h.max(1);
+        let mut hit: Option<usize> = None;
+        for (i, row) in rows.iter_mut().enumerate() {
+            let ov = bottom.min(row.bottom) - top.max(row.top);
+            let shorter = (bottom - top).min(row.bottom - row.top).max(1);
+            if ov * 2 > shorter {
+                row.top = row.top.min(top);
+                row.bottom = row.bottom.max(bottom);
+                hit = Some(i);
+                break;
+            }
+        }
+        match hit {
+            Some(i) => rows[i].parts.push((x, w, text)),
+            None => rows.push(TextRow { top, bottom, parts: vec![(x, w, text)] }),
+        }
+    }
+    for r in rows.iter_mut() {
+        r.parts.sort_by_key(|(x, _, _)| *x);
+    }
+    rows.sort_by_key(|r| r.top);
+    rows
+}
+
+fn join_lines(items: Vec<(i32, i32, i32, i32, String)>) -> String {
+    let mut out = String::new();
+    for (i, r) in rows_of(items).iter().enumerate() {
+        if i > 0 {
+            out.push(char::from(10));
+        }
+        out.push_str(&r.text());
     }
     out
 }
 
+/// 把一块区域按**行列结构**识别成 Markdown 表格。
+///
+/// 做法：det 出行框 → 逐框识别 → 按垂直重叠聚成行 → 按水平区间聚成列 → 按格填字。
+/// 这不是真正的表格线条检测，靠的是"表格里的文字天然按列对齐"，对截图里的数据表
+/// （设置页、报表、Excel 截图）够用；画了合并单元格的复杂表会退化成空格子。
+/// 表格识别的软截止（毫秒）。
+///
+/// **为什么不丢到工作线程**：WinML 的 `LearningModelSession` 不是 `Send`，引擎放在
+/// `thread_local` 里（见 `with_engine`），换线程就得重新加载 det+rec 两个 ONNX，
+/// 那点开销比这一秒大得多。而 `Canvas` 也不是 `Send`（握着 HDC）。
+/// 所以留在 UI 线程，只做两件事：**限制总时长**（Windows 5 秒才判"未响应"，
+/// 2.5 秒的安全垫足够）+ 超时后返回已识别到的部分，而不是让用户盯着黑屏等。
+const TABLE_DEADLINE_MS: u128 = 2500;
+
+pub fn table_markdown(canvas: &Canvas) -> Result<String, String> {
+    if !available() {
+        return Err("PaddleOCR 模型未安装".into());
+    }
+    touch();
+    with_engine(|e| {
+        let boxes = detect(e, canvas)?;
+        let mut items: Vec<(i32, i32, i32, i32, String)> = Vec::new();
+        let start = std::time::Instant::now();
+        let mut cut = false;
+        for b in boxes.iter() {
+            if start.elapsed().as_millis() > TABLE_DEADLINE_MS {
+                cut = true;
+                break;
+            }
+            let rect = clamp_box(*b, canvas.w, canvas.h);
+            if rect.2 < 2 || rect.3 < 2 {
+                continue;
+            }
+            if let Ok(t) = recognize_line(e, canvas, rect) {
+                let t = t.trim().to_string();
+                if !t.is_empty() {
+                    items.push((rect.1, rect.3, rect.0, rect.2, t));
+                }
+            }
+        }
+        if cut {
+            zx_core::log::warn(format!(
+                "表格识别超出 {}ms，只处理了 {}/{} 行（图片过大）",
+                TABLE_DEADLINE_MS,
+                items.len(),
+                boxes.len()
+            ));
+        }
+        if items.is_empty() {
+            return Err("没识别到文字（表格至少要两行两列）".into());
+        }
+        Ok(to_markdown(rows_of(items)))
+    })
+}
+
+/// 行 → 列 → Markdown。列按水平区间聚类，中心点相近的算同一列。
+fn to_markdown(rows: Vec<TextRow>) -> String {
+    if rows.len() < 2 {
+        return String::new();
+    }
+    // 列：所有片段的水平中心，间隔超过中位宽度的一半就断开
+    let mut centers: Vec<i32> = rows
+        .iter()
+        .flat_map(|r| r.parts.iter().map(|(x, w, _)| x + w / 2))
+        .collect();
+    if centers.is_empty() {
+        return String::new();
+    }
+    centers.sort_unstable();
+    let widths: Vec<i32> = rows
+        .iter()
+        .flat_map(|r| r.parts.iter().map(|(_, w, _)| *w))
+        .collect();
+    let mut sorted_w = widths.clone();
+    sorted_w.sort_unstable();
+    let med_w = sorted_w.get(sorted_w.len() / 2).copied().unwrap_or(40).max(8);
+    let mut cols: Vec<i32> = Vec::new();
+    for c in centers {
+        match cols.last() {
+            Some(prev) if (c - prev).abs() <= med_w / 2 => {}
+            _ => cols.push(c),
+        }
+    }
+    if cols.len() < 2 {
+        return String::new();
+    }
+
+    let mut grid: Vec<Vec<String>> = vec![vec![String::new(); cols.len()]; rows.len()];
+    for (ri, row) in rows.iter().enumerate() {
+        for (x, w, text) in &row.parts {
+            let c = x + w / 2;
+            let ci = cols
+                .iter()
+                .enumerate()
+                .min_by_key(|(_, cc)| (*cc - c).abs())
+                .map(|(i, _)| i)
+                .unwrap_or(0);
+            if grid[ri][ci].is_empty() {
+                grid[ri][ci] = text.clone();
+            } else {
+                grid[ri][ci].push(' ');
+                grid[ri][ci].push_str(text);
+            }
+        }
+    }
+
+    let mut out = String::new();
+    let row_line = |cells: &[String]| {
+        let mut l = String::from("|");
+        for c in cells {
+            l.push(' ');
+            l.push_str(&c.replace('|', "/"));
+            l.push_str(" |");
+        }
+        l
+    };
+    out.push_str(&row_line(&grid[0]));
+    out.push(char::from(10));
+    out.push('|');
+    for _ in 0..cols.len() {
+        out.push_str(" --- |");
+    }
+    for row in grid.iter().skip(1) {
+        out.push(char::from(10));
+        out.push_str(&row_line(row));
+    }
+    out
+}
+
+
+// ---------------------------------------------------------------- det
 // ---------------------------------------------------------------- det
 
 /// 文本框：(x, y, w, h)，原图坐标。
@@ -412,6 +663,15 @@ fn recognize_line(e: &mut Engine, canvas: &Canvas, b: BBox) -> Result<String, St
 }
 
 fn rec_segment(e: &mut Engine, canvas: &Canvas, rect: BBox, dst_w: i32) -> Result<String, String> {
+    rec_segment_scored(e, canvas, rect, dst_w).map(|(t, _)| t)
+}
+
+fn rec_segment_scored(
+    e: &mut Engine,
+    canvas: &Canvas,
+    rect: BBox,
+    dst_w: i32,
+) -> Result<(String, f32), String> {
     let (x, y, w, h) = rect;
     let input = to_tensor(canvas, (x, y, w, h), dst_w, REC_H, &[0.5, 0.5, 0.5], &[0.5, 0.5, 0.5]);
     let tensor = TensorFloat::CreateFromShapeArrayAndDataArray(
@@ -428,11 +688,14 @@ fn rec_segment(e: &mut Engine, canvas: &Canvas, rect: BBox, dst_w: i32) -> Resul
     let px = tensor_data(&out).ok_or_else(|| "rec 没有输出".to_string())?;
     let classes = e.rec_classes.max(1);
     if px.len() < classes {
-        return Ok(String::new());
+        return Ok((String::new(), 0.0));
     }
     let steps = px.len() / classes;
     let mut text = String::new();
     let mut last = 0usize;
+    // 置信度：只累加"真的出了一个字"的那些步，blank 步会把平均值拉虚高。
+    let mut conf = 0f32;
+    let mut conf_n = 0usize;
     for t in 0..steps {
         let base = t * classes;
         let row = &px[base..base + classes];
@@ -447,11 +710,14 @@ fn rec_segment(e: &mut Engine, canvas: &Canvas, rect: BBox, dst_w: i32) -> Resul
         if best_i != 0 && best_i != last {
             if let Some(ch) = e.dict.get(best_i - 1) {
                 text.push_str(ch);
+                conf += best;
+                conf_n += 1;
             }
         }
         last = best_i;
     }
-    Ok(text)
+    let score = if conf_n == 0 { 0.0 } else { conf / conf_n as f32 };
+    Ok((text, score))
 }
 
 // ---------------------------------------------------------------- WinML 小工具
@@ -563,12 +829,53 @@ mod tests {
 
     #[test]
     fn join_lines_groups_nearby_rows() {
+        // (top, h, x, text)：同一行的两个片段竖直重叠，第二行差得远
         let items = vec![
-            (10, 0, "hello".to_string()),
-            (12, 100, "world".to_string()),
-            (60, 0, "second".to_string()),
+            (10, 18, 0, 50, "hello".to_string()),
+            (11, 18, 100, 50, "world".to_string()),
+            (60, 18, 0, 60, "second".to_string()),
         ];
         assert_eq!(join_lines(items), "hello world\nsecond");
+    }
+
+    #[test]
+    fn join_lines_keeps_tight_leading_separate() {
+        // 行距很紧（12px 字高、14px 行距）时不能并成一行——UI 里这种密度很常见
+        let items = vec![
+            (0, 12, 0, 40, "第一行".to_string()),
+            (14, 12, 0, 40, "第二行".to_string()),
+            (28, 12, 0, 40, "第三行".to_string()),
+        ];
+        assert_eq!(join_lines(items).lines().count(), 3);
+    }
+
+    #[test]
+    fn to_markdown_builds_a_table() {
+        // 两行三列，列心对齐
+        let items = vec![
+            (0, 20, 10, 60, "姓名".to_string()),
+            (0, 20, 200, 60, "年龄".to_string()),
+            (0, 20, 400, 60, "城市".to_string()),
+            (30, 20, 10, 60, "张三".to_string()),
+            (30, 20, 200, 40, "28".to_string()),
+            (30, 20, 400, 90, "北京".to_string()),
+        ];
+        let md = to_markdown(rows_of(items));
+        let lines: Vec<&str> = md.lines().collect();
+        assert_eq!(lines.len(), 3, "表头 + 分隔 + 一行数据");
+        assert_eq!(lines[0], "| 姓名 | 年龄 | 城市 |");
+        assert!(lines[1].starts_with("| --- |"));
+        assert_eq!(lines[2], "| 张三 | 28 | 北京 |");
+    }
+
+    #[test]
+    fn to_markdown_refuses_single_column() {
+        // 只有一列的"表格"没有意义，返回空串让调用方走普通拼接
+        let items = vec![
+            (0, 20, 10, 60, "第一行".to_string()),
+            (30, 20, 10, 60, "第二行".to_string()),
+        ];
+        assert!(to_markdown(rows_of(items)).is_empty());
     }
 
     #[test]

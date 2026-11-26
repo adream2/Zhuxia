@@ -86,7 +86,8 @@ impl CpuSampler {
 
         // kernel_time 已含 idle，所以分母是 kernel+user。
         let total = dk + du;
-        let pct = if total > 0 { (1.0 - di as f64 / total as f64) * 100.0 } else { 0.0 }.clamp(0.0, 100.0);
+        // FILETIME 是 100ns 计数，百年量级也不会溢出 i64
+        let pct = super::busy_pct(di as i64, total as i64);
         if self.hist.len() >= MAX_HIST { self.hist.pop_front(); }
         self.hist.push_back(pct);
 
@@ -94,9 +95,9 @@ impl CpuSampler {
         let mut per_core = Vec::with_capacity(cur.len());
         for (i, c) in cur.iter().enumerate() {
             if let Some(p) = self.prev_core.get(i) {
-                let t = (c.kernel - p.kernel) + (c.user - p.user);
-                let v = if t > 0 { (1.0 - (c.idle - p.idle) as f64 / t as f64) * 100.0 } else { 0.0 };
-                per_core.push(v.clamp(0.0, 100.0));
+                // 核心被 park/unpark 时计数器可能倒退，`-` 在 debug 构建里会直接 panic
+                let t = c.kernel.saturating_sub(p.kernel) + c.user.saturating_sub(p.user);
+                per_core.push(super::busy_pct(c.idle.saturating_sub(p.idle), t));
             }
         }
         self.prev_core = cur;

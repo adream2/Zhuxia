@@ -218,19 +218,36 @@ pub fn reset() {
 fn store_path() -> Option<std::path::PathBuf> { Some(zx_core::cfg::run_dir().join("netstat.json")) }
 
 /// 有变化才写，且调用方负责限频（采样线程里 60 秒一次）。
+///
+/// 两条以前踩过的坑，都在这里收掉：
+///
+/// 1. **不是原子写**：直接 `fs::write` 覆盖，断电/被强杀恰好落在写盘瞬间 → JSON 截断 →
+///    `load()` 解析失败直接返回，于是**全部历史累计流量与封禁列表静默清零**。
+///    （防火墙规则还在系统里，界面却说没有，状态还会互相矛盾。）
+/// 2. **`dirty` 提前清**：以前先 `g.dirty = false` 再写、还吞掉错误 → 一次磁盘满
+///    之后就不再重试，直到流量下次变化。
+///
+/// 现在：先序列化、原子写、**成功了才清 dirty**。
 pub fn save(force: bool) {
     let mut g = stat();
     if !g.dirty && !force { return; }
-    g.dirty = false;
     let flows: Vec<_> = g.flows.values().map(|f| json!({
         "key": f.key, "name": f.name, "path": f.path, "up": f.up, "down": f.down,
     })).collect();
     let blocked: Vec<_> = g.blocked.iter().cloned().collect();
     let v = json!({ "flows": flows, "blocked": blocked });
-    if let Some(p) = store_path() {
-        if let Ok(text) = serde_json::to_string(&v) {
-            let _ = std::fs::write(p, text);
+    let Some(p) = store_path() else { return };
+    let text = match serde_json::to_vec(&v) {
+        Ok(t) => t,
+        Err(e) => {
+            zx_core::log::warn(format!("流量统计序列化失败：{e}"));
+            return;
         }
+    };
+    match zx_core::store::write_atomic(&p, &text) {
+        Ok(()) => g.dirty = false,
+        // 保留 dirty，下一轮（或退出时那次 force）会再试
+        Err(e) => zx_core::log::warn(format!("流量统计落盘失败，稍后重试：{e}")),
     }
 }
 
@@ -238,7 +255,16 @@ pub fn save(force: bool) {
 pub fn load() {
     let Some(p) = store_path() else { return };
     let Ok(text) = std::fs::read_to_string(&p) else { return };
-    let Ok(v) = serde_json::from_str::<serde_json::Value>(&text) else { return };
+    let Ok(v) = serde_json::from_str::<serde_json::Value>(&text) else {
+        // 以前这里是静默 return：文件损坏时"历史流量归零"看起来像功能 bug，
+        // 而不是"上次写到一半被打断了"。留一条日志，用户报障时能对上号。
+        zx_core::log::warn(format!(
+            "流量统计文件损坏，已忽略（{} 字节）：{}",
+            text.len(),
+            p.display()
+        ));
+        return;
+    };
     let mut g = stat();
     if let Some(arr) = v.get("flows").and_then(|x| x.as_array()) {
         for f in arr {

@@ -13,6 +13,38 @@ pub(crate) fn capture_patch(patch: Value) -> Value {
     patch_section(|s| &mut s.capture, patch, capture_view, || {})
 }
 
+/// 探活：拿真实接口发一次请求，返回成功样本或完整错误。
+///
+/// 免费接口说挂就挂（有道的老端点就废过一次），用户不该靠"点了没反应"去猜。
+#[tauri::command]
+pub(crate) fn ocr_ai_probe(kind: String) -> Value {
+    let (ok, text, error) = if kind == "translate" {
+        match crate::ocr_ai::translate("Hello, world. This is a connectivity test.", "auto") {
+            // 探测用的样本只有一句话，不可能"部分失败"；warning 照实带出去
+            Ok((t, warn)) => (true, t, warn.unwrap_or_default()),
+            Err(e) => (false, String::new(), e),
+        }
+    } else {
+        match crate::ocr_ai::polish("这是一段测试文本，用来确认 AI 接口通不通。") {
+            Ok(t) => (true, t, String::new()),
+            Err(e) => (false, String::new(), e),
+        }
+    };
+    json!({
+        "ok": ok,
+        "text": text,
+        "error": error,
+        "to": if kind == "translate" { crate::ocr_ai::target_label("Hello, world. This is a connectivity test.", "auto") } else { "" }
+    })
+}
+
+/// 手动恢复元素识别（清掉"卡死计数"和窗口黑名单）。
+#[tauri::command]
+pub(crate) fn uielem_reset() -> Value {
+    ::capture::uielem::reset();
+    json!({ "ok": true, "state": capture_view() })
+}
+
 #[tauri::command]
 pub(crate) fn capture_open_dir() {
     let dir = zx_core::cfg::cfg().capture().save_dir;
@@ -207,8 +239,38 @@ pub(crate) fn capture_view() -> Value {
         "autoSave": c.auto_save,
         "magnifier": c.magnifier,
         "detectWindow": c.detect_window,
+        // 元素识别被卡死的程序反复拖死时会自动停用（10 分钟后自恢复）。
+        // 这里暴露状态，设置页给一个"立即恢复"的入口，免得用户只能重启。
+        "uielemDisabled": ::capture::uielem::is_disabled(),
+        "translateUrl": c.translate_url,
+        "translateTo": c.translate_to,
+        "translateConsent": c.translate_consent,
+        "aiBaseUrl": c.ai_base_url,
+        // 永不回显 key 原文：只回"有没有配"。前端要的是"已保存"这个状态，
+        // 明文来回传一次就多一次泄漏机会（WebView 内存、devtools 抓包）。
+        "aiKeySet": ::imgbed::secrets::has("ai.key"),
+        "aiModel": c.ai_model,
+        "aiPrompt": c.ai_prompt,
         "record": record_view(),
     })
+}
+
+/// 写 / 清 AI Key。空字符串 = 删除。
+///
+/// 存 `<exe>/imgbed/secrets.dat`（DPAPI，绑定当前 Windows 用户），
+/// 和 settings.yaml 分开——那份文件会被同步、备份、贴进聊天。
+#[tauri::command]
+pub(crate) fn capture_ai_key(value: String) -> Value {
+    let v = value.trim();
+    let r = if v.is_empty() {
+        ::imgbed::secrets::clear("ai.key")
+    } else {
+        ::imgbed::secrets::set("ai.key", v)
+    };
+    match r {
+        Ok(()) => json!({ "ok": true, "state": capture_view() }),
+        Err(e) => json!({ "ok": false, "error": e }),
+    }
 }
 
 // ---------------- 剪贴板 ----------------

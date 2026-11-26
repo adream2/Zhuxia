@@ -15,6 +15,22 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use crate::snapshot::{self, Snapshot, MASK_CPU, MASK_DISK, MASK_GPU, MASK_NET, MASK_RAM};
 
+/// 由「空闲增量 / 总增量」算占用百分比。
+///
+/// CPU 总体、单核、磁盘三处都是同一个式子 `1 - 空闲/总计`。分开写容易各自写错一点，
+/// 而这类数算错**不会崩**，只会长期误导人（任务栏上少显示 20% 也没人报 bug）。
+/// 收在一处并配测试。
+///
+/// * `total <= 0`：两次采样之间时间没推进，或计数器刚重置 → 0
+/// * 空闲超过总计 / 为负：计数器精度抖动或回退，夹到合法范围
+pub(crate) fn busy_pct(idle: i64, total: i64) -> f64 {
+    if total <= 0 {
+        return 0.0;
+    }
+    let idle = idle.max(0);
+    ((1.0 - idle as f64 / total as f64) * 100.0).clamp(0.0, 100.0)
+}
+
 pub struct Sampler {
     cpu: cpu::CpuSampler,
     mem: mem::MemSampler,
@@ -273,4 +289,40 @@ pub fn spawn() {
         drop(sampler);
         DONE.store(true, Ordering::Relaxed);
     }).ok();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // 占用率是用户每天盯着看的数，算错了不会崩、只会一直骗人，所以边界要钉住。
+
+    #[test]
+    fn busy_pct_full_and_idle() {
+        assert_eq!(busy_pct(0, 1000), 100.0, "空闲增量为 0 就是满载");
+        assert_eq!(busy_pct(1000, 1000), 0.0, "全空闲就是 0%");
+        assert_eq!(busy_pct(750, 1000), 25.0);
+    }
+
+    #[test]
+    fn busy_pct_handles_no_elapsed_time() {
+        // 两次采样撞在同一刻，或计数器刚重置：没有分母就不该报数字
+        assert_eq!(busy_pct(0, 0), 0.0);
+        assert_eq!(busy_pct(0, -1), 0.0);
+    }
+
+    #[test]
+    fn busy_pct_clamps_counter_jitter() {
+        // 空闲超过总计（计时精度抖动）、负的增量（计数器回退）都夹到合法区间
+        assert_eq!(busy_pct(1200, 1000), 0.0);
+        assert_eq!(busy_pct(-50, 1000), 100.0);
+    }
+
+    #[test]
+    fn busy_pct_never_exceeds_bounds() {
+        for (idle, total) in [(0i64, 1i64), (1, 3), (2, 7), (999, 1000), (1000, 1001)] {
+            let v = busy_pct(idle, total);
+            assert!((0.0..=100.0).contains(&v), "idle={idle} total={total} → {v}");
+        }
+    }
 }

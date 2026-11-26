@@ -29,6 +29,8 @@ const WM_CLEAR: u32 = WM_APP + 53;
 /// 闲置后释放轨迹画布（只在覆盖层线程 drop GDI+ 对象）。
 const WM_RELEASE: u32 = WM_APP + 54;
 const TIMER_HINT: usize = 1;
+/// 轨迹单独淡出的定时器：动作名还要留一会儿，路径先撤。
+const TIMER_TRAIL: usize = 2;
 
 static HWND_ATOM: AtomicIsize = AtomicIsize::new(0);
 /// 最后一次上屏的时刻（`GetTickCount64`，毫秒）。闲置回收用。
@@ -66,8 +68,10 @@ fn overlay() -> &'static Mutex<Option<Overlay>> {
     CELL.get_or_init(|| Mutex::new(None))
 }
 
-// 覆盖层只在主线程创建与绘制；放进 `static Mutex` 需要一个 `Send` 标记。
-// 真正的跨线程只发生在一句 `PostMessage` 上，窗口句柄本身是可安全传递的。
+// SAFETY: 覆盖层窗口只在主线程创建与绘制，放进 `static Mutex` 只是为了让
+// 消息回调能取到状态（`static` 要求 `T: Send`），**不是**允许把值搬到别的线程。
+// 里面握着 HWND 与绘制状态；HWND 本身跨线程传递是安全的（实际跨线程只发生在一句
+// `PostMessage` 上），但绘制必须回到创建线程，否则 GDI 状态会串。
 unsafe impl Send for Overlay {}
 
 struct Overlay {
@@ -215,12 +219,28 @@ pub fn settle(duration_ms: u32) {
     }
 }
 
+/// 只清轨迹、保留提示：手势松开后路径该立刻让位，动作名可以再多停一会儿。
+///
+/// 之前两者共用 `settle(hint_ms)` 一个定时器——提示默认停 900ms，轨迹也就跟着挂
+/// 900ms，手感上像"操作完了还拖着一根线"（用户反馈）。现在分开：
+/// 轨迹 220ms 后就撤，提示照旧。
+pub fn fade_trail(ms: u32) {
+    let Some(hwnd) = hwnd() else { return };
+    if trail_cell().lock().unwrap_or_else(|p| p.into_inner()).0.is_empty() {
+        return;
+    }
+    unsafe {
+        SetTimer(hwnd, TIMER_TRAIL, ms.max(60), None);
+    }
+}
+
 pub fn clear() {
     trail_cell().lock().unwrap_or_else(|p| p.into_inner()).0.clear();
     *hint_cell().lock().unwrap_or_else(|p| p.into_inner()) = None;
     if let Some(hwnd) = hwnd() {
         unsafe {
             let _ = KillTimer(hwnd, TIMER_HINT);
+            let _ = KillTimer(hwnd, TIMER_TRAIL);
         }
     }
     REDRAW_PENDING.store(false, Ordering::SeqCst);
@@ -311,6 +331,15 @@ unsafe fn wndproc_inner(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) ->
             }
             *hint_cell().lock().unwrap_or_else(|p| p.into_inner()) = None;
             trail_cell().lock().unwrap_or_else(|p| p.into_inner()).0.clear();
+            redraw();
+            LRESULT(0)
+        }
+        WM_TIMER if wparam.0 == TIMER_TRAIL => {
+            unsafe {
+                let _ = KillTimer(hwnd, TIMER_TRAIL);
+            }
+            trail_cell().lock().unwrap_or_else(|p| p.into_inner()).0.clear();
+            // 提示还在的话，redraw 会自动只画气泡、不隐藏窗口
             redraw();
             LRESULT(0)
         }

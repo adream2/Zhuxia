@@ -23,7 +23,8 @@ let GO = null;
 let PICKLIST = null;
 
 const F = { items: [], dir: "", busy: false, pick: null };
-const IMG = { source: "local", q: "", sort: "newest", provider: "", local: [], remote: [], total: 0 };
+const IMG = { source: "local", q: "", sort: "newest", provider: "", local: [], remote: [], total: 0,
+  remotePath: "", remoteDirs: [] };
 let seq = 0;
 let dropHooked = false;
 
@@ -475,6 +476,10 @@ function renderImages() {
   BODY.append(tools);
   BODY.append(h("div", "note", "本地上传记录跨平台；远端目录取决于当前平台能力（自定义 HTTP 没有这个能力）。"));
 
+  PATHBAR = h("div", "pathbar");
+  PATHBAR.hidden = IMG.source !== "remote";
+  BODY.append(PATHBAR);
+
   GRID = h("div", "thumbs");
   BODY.append(GRID);
   loadGrid();
@@ -513,16 +518,68 @@ function loadGrid() {
       for (const it of IMG.local) grid.append(thumbCard(it, "local"));
     });
   } else {
-    const dir = tokens(F.dir || "");
-    inv("ib_remote", { dir }).then((r) => {
+    paintPathBar();
+    inv("ib_remote", { dir: IMG.remotePath || "" }).then((r) => {
       grid.innerHTML = "";
       if (r && !r.supported) { grid.append(h("div", "empty", "当前平台不支持远端浏览")); return; }
+      IMG.remoteDirs = (r && r.dirs) || [];
+      IMG.remote = (r && r.items) || [];
+      paintPathBar();
       if (r && r.error) { grid.append(h("div", "empty", r.error)); return; }
-      IMG.remote = r.items || [];
-      if (!IMG.remote.length) { grid.append(h("div", "empty", "这个目录里没有图片")); return; }
+      // 目录排前面：远端浏览的价值就是能一层层点进去，图片只是叶子
+      for (const d of IMG.remoteDirs) grid.append(dirCard(d));
       for (const it of IMG.remote) grid.append(thumbCard(it, "remote"));
+      if (!IMG.remoteDirs.length && !IMG.remote.length) {
+        grid.append(h("div", "empty", IMG.remotePath ? "这个目录是空的" : "远端还没有任何内容"));
+      }
     });
   }
+}
+
+// 路径条：根目录 / a / b，每一段可点；非根时给一个"上一级"。
+let PATHBAR = null;
+function paintPathBar() {
+  if (!PATHBAR) return;
+  PATHBAR.innerHTML = "";
+  if (IMG.source !== "remote") { PATHBAR.hidden = true; return; }
+  PATHBAR.hidden = false;
+  const seg = IMG.remotePath ? IMG.remotePath.split("/").filter(Boolean) : [];
+  const mk = (label, path) => {
+    const b = h("button", "crumb", label);
+    b.onclick = () => { IMG.remotePath = path; loadGrid(); };
+    return b;
+  };
+  if (seg.length) {
+    const up = h("button", "crumb up", "↑ 上一级");
+    up.onclick = () => { IMG.remotePath = seg.slice(0, -1).join("/"); loadGrid(); };
+    PATHBAR.append(up);
+  }
+  PATHBAR.append(mk("根目录", ""));
+  seg.forEach((name, i) => {
+    PATHBAR.append(h("span", "crumb-sep", "/"));
+    PATHBAR.append(mk(name, seg.slice(0, i + 1).join("/")));
+  });
+  const cfgDir = tokens(F.dir || "").replace(/^\/+|\/+$/g, "");
+  if (cfgDir && cfgDir !== IMG.remotePath) {
+    const jump = h("button", "crumb jump", `跳到上传目录（${cfgDir}）`);
+    jump.onclick = () => { IMG.remotePath = cfgDir; loadGrid(); };
+    PATHBAR.append(jump);
+  }
+}
+
+function dirCard(name) {
+  const el = h("div", "thumb folder");
+  const box = h("div", "img");
+  box.append(h("div", "fold-glyph", "📁"));
+  const meta = h("div", "meta");
+  meta.append(h("div", "", name));
+  meta.append(h("div", "", "目录"));
+  el.append(box, meta);
+  el.onclick = () => {
+    IMG.remotePath = [IMG.remotePath, name].filter(Boolean).join("/");
+    loadGrid();
+  };
+  return el;
 }
 
 function thumbCard(it, kind) {
@@ -742,9 +799,13 @@ function fieldControl(meta, f, id) {
 }
 
 function patchProvider(id, patch) {
+  const switching = id !== IMG.provider;
   inv("imgbed_provider_patch", { provider: id, patch }).then((s) => {
     S = s;
     F.dir = s.path;
+    // 换平台要把远端浏览位置归零：上家的 2026/11 在新平台上多半不存在，
+    // 不重置的话会停在一个空目录里，看起来像"新平台没东西"。
+    if (switching) IMG.remotePath = "";
     renderTab();
   });
 }

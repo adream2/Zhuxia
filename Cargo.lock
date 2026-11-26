@@ -49,7 +49,7 @@ checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 
 [[package]]
 name = "appicon"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "backhand",
  "bzip2",
@@ -58,7 +58,6 @@ dependencies = [
  "hfsplus",
  "liblzma",
  "libwebp-sys",
- "lzma-rs",
  "plist",
  "png",
  "quick-xml",
@@ -356,11 +355,10 @@ dependencies = [
 
 [[package]]
 name = "capture"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "gif",
  "serde",
- "serde_json",
  "windows 0.58.0",
  "zx-core",
  "zx-ui",
@@ -465,7 +463,7 @@ dependencies = [
 
 [[package]]
 name = "clipboard"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "regex-lite",
  "serde",
@@ -585,21 +583,6 @@ checksum = "5ca28b0ae3115b884660db4118d803791fd6756b6e88f39c0f3f7859060d7566"
 dependencies = [
  "libc",
 ]
-
-[[package]]
-name = "crc"
-version = "3.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5eb8a2a1cd12ab0d987a5d5e825195d372001a4094a0376319d5a0ad71c1ba0d"
-dependencies = [
- "crc-catalog",
-]
-
-[[package]]
-name = "crc-catalog"
-version = "2.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "217698eaf96b4a3f0bc4f3662aaa55bdf913cd54d7204591faa790070c6d0853"
 
 [[package]]
 name = "crc32fast"
@@ -1327,7 +1310,7 @@ dependencies = [
 
 [[package]]
 name = "gesture"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "windows 0.58.0",
  "zx-core",
@@ -1860,7 +1843,7 @@ checksum = "65b27460c2c92b037f3f94c538ed9a3342f3fdf923606781629ccb35f82d042a"
 
 [[package]]
 name = "imgbed"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "base64 0.21.7",
  "png",
@@ -1877,7 +1860,7 @@ dependencies = [
 
 [[package]]
 name = "imgconv"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "image",
  "libwebp-sys",
@@ -2273,16 +2256,6 @@ name = "lzfse_rust"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5edeac3ec657925dececc672bdd58fa2212291886ddcb3e08aa46924c78340c6"
-
-[[package]]
-name = "lzma-rs"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "297e814c836ae64db86b36cf2a557ba54368d03f6afcd7d947c266692f71115e"
-dependencies = [
- "byteorder",
- "crc",
-]
 
 [[package]]
 name = "lzma-rust2"
@@ -3968,10 +3941,9 @@ checksum = "61c41af27dd6d1e27b1b16b489db798443478cef1f06a660c96db617ba5de3b1"
 
 [[package]]
 name = "taskmon"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "libloading",
- "serde",
  "serde_json",
  "windows 0.58.0",
  "zx-core",
@@ -5503,7 +5475,7 @@ dependencies = [
 
 [[package]]
 name = "zhuxia"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "appicon",
  "base64 0.21.7",
@@ -5600,7 +5572,7 @@ dependencies = [
 
 [[package]]
 name = "zx-core"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "serde",
  "serde_yaml",
@@ -5609,7 +5581,7 @@ dependencies = [
 
 [[package]]
 name = "zx-media"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "libwebp-sys",
  "png",
@@ -5618,7 +5590,7 @@ dependencies = [
 
 [[package]]
 name = "zx-ui"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "windows 0.58.0",
  "zx-core",

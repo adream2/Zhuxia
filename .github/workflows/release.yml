@@ -150,6 +150,19 @@ jobs:
           rustc -V
           cargo -V
 
+      - name: 静态检查（clippy）
+        # 本地靠自觉跑 clippy，最后总会被忘掉；这里把它变成硬闸门。
+        # 只对"新引入的告警"拦截——代码库当前是 0 告警，标准就定在这里。
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+      - name: 依赖安全公告
+        # 541 个包，靠人肉盯 CVE 不现实。先用 rustsec/audit-check 跑起来观察，
+        # 稳定后再去掉 continue-on-error：现在它一旦报新公告就会红，容易挡住正常发版。
+        continue-on-error: true
+        uses: rustsec/audit-check@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
       - name: 单元测试
         run: cargo test --workspace --locked
 
@@ -174,17 +187,26 @@ jobs:
           VERSION: ${{ needs.validate.outputs.version }}
           ZIP: ${{ needs.validate.outputs.zip }}
           SRC_ZIP: ${{ needs.validate.outputs.src_zip }}
+          SYM_ZIP: zhuxia-${{ needs.validate.outputs.version }}-win-x64-symbols.zip
         run: |
           set -euo pipefail
-          rm -rf dist "$ZIP" "$SRC_ZIP" SHA256SUMS.txt
+          rm -rf dist "$ZIP" "$SRC_ZIP" "$SYM_ZIP" SHA256SUMS.txt
           mkdir -p dist
           # 运行时只需要 exe：图标、VERSIONINFO、设置面板的前端资源都已内嵌
           cp target/release/zhuxia.exe dist/
           cp LICENSE NOTICE THIRD_PARTY_NOTICES.md README.md dist/
           powershell -NoProfile -Command "Compress-Archive -Path 'dist\*' -DestinationPath '$ZIP' -CompressionLevel Optimal -Force"
+          # 符号包单独发：exe 是 strip 过的，线上 panic 的行号只能靠这份 .pdb 还原。
+          # 它不进用户包（34 MB），但必须跟同一个版本一起归档，否则等于没开 debug=1。
+          if [[ -f target/release/zhuxia.pdb ]]; then
+            powershell -NoProfile -Command "Compress-Archive -Path 'target\release\zhuxia.pdb' -DestinationPath '$SYM_ZIP' -CompressionLevel Optimal -Force"
+          else
+            echo "::warning::没有生成 zhuxia.pdb，符号包将缺失（线上崩溃无法还原行号）"
+          fi
           # 源码包与该标签指向同一个提交
           git archive --format=zip --prefix="zhuxia-$VERSION/" -o "$SRC_ZIP" HEAD
           sha256sum "$ZIP" "$SRC_ZIP" > SHA256SUMS.txt
+          if [[ -f "$SYM_ZIP" ]]; then sha256sum "$SYM_ZIP" >> SHA256SUMS.txt; fi
           cat SHA256SUMS.txt
           du -h "$ZIP" "$SRC_ZIP"
 
@@ -198,6 +220,16 @@ jobs:
             SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 30
+
+      - name: 上传符号包
+        # 单独一步 + `continue-on-error`：符号包缺失不该拦住发版，但要在日志里留痕
+        uses: actions/upload-artifact@v4
+        continue-on-error: true
+        with:
+          name: zhuxia-${{ needs.validate.outputs.version }}-symbols
+          path: zhuxia-${{ needs.validate.outputs.version }}-win-x64-symbols.zip
+          if-no-files-found: warn
+          retention-days: 90
 
       - name: 写入汇总
         shell: bash
@@ -224,6 +256,12 @@ jobs:
         with:
           name: zhuxia-${{ needs.validate.outputs.version }}
 
+      - uses: actions/download-artifact@v4
+        # 符号包是可选资产：拿不到就照常发版
+        continue-on-error: true
+        with:
+          name: zhuxia-${{ needs.validate.outputs.version }}-symbols
+
       - name: gh release create
         shell: bash
         env:
@@ -231,6 +269,7 @@ jobs:
           # 这个 job 没有 checkout，gh 无法从工作目录推断仓库
           GH_REPO: ${{ github.repository }}
           TAG: ${{ needs.validate.outputs.tag }}
+          VERSION: ${{ needs.validate.outputs.version }}
           CHANNEL: ${{ needs.validate.outputs.channel }}
           PRERELEASE: ${{ needs.validate.outputs.prerelease }}
           DRAFT: ${{ inputs.draft }}
@@ -241,9 +280,17 @@ jobs:
           EXTRA=()
           if [[ "$PRERELEASE" == "true" ]]; then EXTRA+=(--prerelease); fi
           if [[ "$DRAFT" == "true" ]]; then EXTRA+=(--draft); fi
+          ASSETS=("$ZIP" "$SRC_ZIP" SHA256SUMS.txt)
+          # 符号包（.pdb）单独作为资产：用户不需要，但排查线上崩溃必须有
+          SYM_ZIP="zhuxia-$VERSION-win-x64-symbols.zip"
+          if [[ -f "$SYM_ZIP" ]]; then
+            ASSETS+=("$SYM_ZIP")
+          else
+            echo "::warning::符号包不存在，本次 Release 不带 .pdb"
+          fi
           # --target 让标签落在触发这次构建的提交上，和源码包/产物同源
           gh release create "$TAG" \
-            "$ZIP" "$SRC_ZIP" SHA256SUMS.txt \
+            "${ASSETS[@]}" \
             --target "$GITHUB_SHA" \
             --title "$TAG（$CHANNEL）" \
             --generate-notes \

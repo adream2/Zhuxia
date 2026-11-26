@@ -29,6 +29,8 @@ struct Dlg {
 }
 
 thread_local! {
+    /// 借用计数，见 `zx_core::borrow`。
+    static BORROW: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
     static D: RefCell<Option<*mut Dlg>> = const { RefCell::new(None) };
 }
 
@@ -55,7 +57,7 @@ pub fn card(title: &str, body: &[&str], buttons: &[&str]) -> usize {
     window::set_window_icon(hwnd);
     D.with(|s| *s.borrow_mut() = Some(Box::into_raw(d)));
     zx_ui::painter::set_round_region(hwnd, w, h, zx_core::win::dpi_scale_i(12.0, dpi));
-    if let Some(d) = get(hwnd) { d.draw(); }
+    if let Some(mut d) = get(hwnd) { d.draw(); }
     unsafe {
         let work = window::work_area(hwnd);
         let _ = SetWindowPos(hwnd, HWND_TOPMOST, (work.left + work.right - w) / 2, (work.top + work.bottom - h) / 2,
@@ -84,8 +86,14 @@ pub fn card(title: &str, body: &[&str], buttons: &[&str]) -> usize {
 
 fn done(hwnd: HWND) -> bool { get(hwnd).map(|d| d.done).unwrap_or(true) }
 
-fn get(hwnd: HWND) -> Option<&'static mut Dlg> {
-    D.with(|s| match *s.borrow() { Some(p) if unsafe { (*p).hwnd } == hwnd => Some(unsafe { &mut *p }), _ => None })
+/// 取对话框状态。返回借用守卫，嵌套借用会在 debug 构建里断言（见 `zx_core::borrow`）。
+fn get(hwnd: HWND) -> Option<zx_core::borrow::Ref<Dlg>> {
+    D.with(|s| match *s.borrow() {
+        Some(p) if unsafe { (*p).hwnd } == hwnd => {
+            Some(unsafe { zx_core::borrow::Ref::new(p, &BORROW, "任务栏对话框") })
+        }
+        _ => None,
+    })
 }
 
 impl Dlg {
@@ -153,7 +161,7 @@ unsafe fn wndproc_inner(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -> LRESULT {
     match msg {
         WM_NCCREATE => LRESULT(1),
         WM_MOUSEMOVE => {
-            if let Some(d) = get(hwnd) {
+            if let Some(mut d) = get(hwnd) {
                 let x = (l.0 & 0xFFFF) as i16 as i32;
                 let y = ((l.0 >> 16) & 0xFFFF) as i16 as i32;
                 let hit = d.button_at(x, y).unwrap_or(usize::MAX);
@@ -162,7 +170,7 @@ unsafe fn wndproc_inner(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -> LRESULT {
             LRESULT(0)
         }
         WM_LBUTTONUP => {
-            if let Some(d) = get(hwnd) {
+            if let Some(mut d) = get(hwnd) {
                 let x = (l.0 & 0xFFFF) as i16 as i32;
                 let y = ((l.0 >> 16) & 0xFFFF) as i16 as i32;
                 if let Some(i) = d.button_at(x, y) { d.result = i; d.done = true; }
@@ -172,7 +180,7 @@ unsafe fn wndproc_inner(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -> LRESULT {
         }
         WM_KEYDOWN => {
             if w.0 == 0x1B { // Esc
-                if let Some(d) = get(hwnd) { d.done = true; let _ = DestroyWindow(hwnd); }
+                if let Some(mut d) = get(hwnd) { d.done = true; let _ = DestroyWindow(hwnd); }
             }
             LRESULT(0)
         }

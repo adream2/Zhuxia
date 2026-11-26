@@ -351,6 +351,23 @@ pub struct CaptureCfg {
     pub style: Option<CaptureStyleCfg>,
     /// 录屏（GIF + 摄像头合成）。
     pub record: Option<RecordCfg>,
+
+    /// 自定义翻译接口（POST JSON）。留空走内置免费接口。
+    pub translate_url: Option<String>,
+    /// 翻译目标语言：空/auto = 自动（含中文译成英文，否则译成中文）；
+    /// 其余用 BCP-47 风格：zh / en / ja / ko / fr / de / es / ru
+    pub translate_to: Option<String>,
+    /// 是否允许把正文发送到**内置第三方翻译接口**。
+    ///
+    /// `None`/`false` = 还没同意：第一次点翻译会弹一次确认。配了 `translate_url`
+    /// （自建接口）时不需要这个同意——那是用户自己的服务。
+    pub translate_consent: Option<bool>,
+    pub ai_base_url: Option<String>,
+    /// **已废弃，仅用于迁移**：以前 AI Key 明文写在 `settings.yaml` 里，现在改存
+    /// `imgbed/secrets.dat`（DPAPI）的 `ai.key`。读到非空值会迁走并清空这个字段。
+    pub ai_key: Option<String>,
+    pub ai_model: Option<String>,
+    pub ai_prompt: Option<String>,
 }
 
 /// 解析后的截图配置：代码只读这一份。
@@ -364,6 +381,19 @@ pub struct CaptureSettings {
     pub detect_window: bool,
     pub style: Option<CaptureStyleCfg>,
     pub record: RecordSettings,
+
+    // ---- OCR 结果的翻译 / AI（空串 = 没配） ----
+    /// 自定义翻译接口：POST `{"text": "..."}` → `{"text": "..."}`。留空用内置免费接口。
+    pub translate_url: String,
+    /// 翻译目标语言（`auto` = 自动判方向）
+    pub translate_to: String,
+    /// 已同意把正文发送到内置第三方翻译接口
+    pub translate_consent: bool,
+    /// OpenAI 兼容 base（例如 https://api.openai.com/v1）
+    pub ai_base_url: String,
+    pub ai_model: String,
+    /// 覆盖默认的「OCR 整理」提示词
+    pub ai_prompt: String,
 }
 
 /// 手势动作。`type` = `hotkey` / `window` / `program` / `volume`，
@@ -1187,6 +1217,12 @@ impl Settings {
             detect_window: c.detect_window != Some(false),
             style: c.style.clone(),
             record: self.record(),
+            translate_url: c.translate_url.unwrap_or_default(),
+            translate_to: c.translate_to.unwrap_or_else(|| "auto".into()),
+            translate_consent: c.translate_consent == Some(true),
+            ai_base_url: c.ai_base_url.unwrap_or_default(),
+            ai_model: c.ai_model.unwrap_or_default(),
+            ai_prompt: c.ai_prompt.unwrap_or_default(),
         }
     }
 
@@ -1343,17 +1379,9 @@ impl Settings {
         // 全默认值剪完是空的：不写文件（保持"文件只记改动"的语义），也算成功。
         let Some(value) = prune_nulls(value) else { return Ok(()) };
         let text = serde_yaml::to_string(&value).map_err(|e| format!("序列化失败：{e}"))?;
-
-        let tmp = path.with_extension("yaml.tmp");
-        std::fs::write(&tmp, text).map_err(|e| format!("写 {} 失败：{e}", tmp.display()))?;
         // 原子替换：老实现"先删后改名"会在中间态丢掉整份配置。
-        if let Err(e) = std::fs::rename(&tmp, path) {
-            // 文件被占用 / 跨卷时 rename 会失败，退回复制；两条路都失败才算真失败。
-            std::fs::copy(&tmp, path)
-                .map_err(|e2| format!("改名失败（{e}），复制也失败：{e2}"))?;
-            let _ = std::fs::remove_file(&tmp);
-        }
-        Ok(())
+        // 实现收到 `crate::store`，与 secrets/流量统计共用一份（别再各写一遍）。
+        crate::store::write_atomic(path, text.as_bytes())
     }
 }
 

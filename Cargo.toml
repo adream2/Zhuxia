@@ -3,7 +3,7 @@ resolver = "2"
 members = ["crates/zx-core", "crates/zx-ui", "crates/taskmon", "crates/clipboard", "crates/capture", "crates/gesture", "crates/imgconv", "crates/appicon", "crates/zx-media", "crates/imgbed", "crates/zhuxia"]
 
 [workspace.package]
-version = "0.0.2"
+version = "0.0.3"
 edition = "2021"
 authors = ["Zhuxia"]
 license = "Apache-2.0"
@@ -24,6 +24,9 @@ codegen-units = 1
 # 不要加回 panic = "abort"：窗口过程/钩子靠 zx_ui::guard_proc 里的 catch_unwind 兜底，
 # abort 会让兜底彻底失效（回调里任何 panic 直接杀进程）。代价是体积 +4.4MB（9.0 → 13.4）。
 strip = true
+# 放开行号级调试信息：MSVC 下它落在单独的 .pdb 里（不进 exe，分发体积不变），
+# 但线上 panic 只有一句消息、没有可用栈时，排查基本靠猜。发版时把 .pdb 单独归档即可。
+debug = 1
 
 # 逐像素的热循环不能按体积优化：缩放一步 1280×720 在 opt-level=z 下要 19ms，
 # 换成 3 只要 6ms（都是实测）。其余 crate 继续保持 z，二进制只大几十 KB。

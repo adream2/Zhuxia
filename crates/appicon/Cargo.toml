@@ -23,7 +23,6 @@ quick-xml = "0.42"
 # deb 的 data.tar / rpm 的 cpio / AppImage 的 squashfs。
 tar = "0.4"
 flate2 = "1"
-lzma-rs = "0.3"
 liblzma = "0.4"
 ruzstd = "0.9"
 bzip2 = "0.6"

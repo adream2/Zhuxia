@@ -22,6 +22,22 @@ use crate::secure;
 
 const SESSION_MAX: usize = 500;
 
+/// 单条记录写进历史文件的体积上限（正文 + 富文本）。
+///
+/// 历史文件是**整份重写 + 整份 DPAPI 加密**，代价和总体积线性相关。实测
+/// （`crates/clipboard` 的探针）：1000 条小文本（0.25MB）约 4ms，可以忽略；
+/// 但一条 10MB 的文本会让**之后每一次复制**都付出 ~576ms（DPAPI 约 57MB/s），
+/// 而且全程握着 store 的锁，面板这时候打开就会卡住。
+///
+/// 所以超过上限的记录**留在内存里照常可用**（粘贴、搜索都不受影响），只是不进
+/// 历史文件——重启后消失。落库时给它打了「不保存」标签，面板里能看见。
+pub const MAX_PERSIST_BYTES: usize = 1024 * 1024;
+
+fn persistable(e: &Entry) -> bool {
+    let html = e.html.as_ref().map_or(0, |h| h.len());
+    e.content.len() + html <= MAX_PERSIST_BYTES
+}
+
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum Sort {
@@ -283,10 +299,12 @@ impl Store {
     /// 整份加密后原子写。DPAPI 失败就放弃本次写盘（绝不退回明文）。
     pub fn save(&self) {
         let _ = std::fs::create_dir_all(&self.dir);
+        // 过大的记录只留在内存里，别让它们把每次复制都拖成几百毫秒。
+        let entries: Vec<Entry> = self.entries.iter().filter(|e| persistable(e)).cloned().collect();
         let disk = Disk {
             version: 2,
             next_id: self.next_id,
-            entries: self.entries.clone(),
+            entries,
             tags: self.tags.clone(),
         };
         let Ok(mut json) = serde_json::to_vec(&disk) else { return };
@@ -924,6 +942,23 @@ mod tests {
             hash: rules::text_hash(content),
             ..Default::default()
         }
+    }
+
+    // 历史文件是整份重写 + 整份 DPAPI 加密（实测 10MB 要约 576ms），所以超大记录
+    // 只留在内存里：粘贴、搜索照常，重启后消失。这条规则要是破了，用户复制一个大
+    // 日志文件之后每一次复制都会卡半秒。
+    #[test]
+    fn oversized_entries_stay_in_memory_but_skip_the_file() {
+        let mut st = temp_store("oversize");
+        st.add(entry(Kind::Text, "small", "t")).unwrap();
+        let huge = "x".repeat(MAX_PERSIST_BYTES + 1);
+        st.add(entry(Kind::Text, &huge, "t")).unwrap();
+        assert_eq!(st.list(&Query::default()).len(), 2, "两条都在内存里，照常可用");
+
+        st.save();
+        let reloaded = Store::open_at(st.dir.clone());
+        let sizes: Vec<usize> = reloaded.entries.iter().map(|e| e.content.len()).collect();
+        assert_eq!(sizes, vec![5], "重启后只剩小那条；超大记录不进文件");
     }
 
     #[test]

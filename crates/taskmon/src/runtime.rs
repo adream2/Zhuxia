@@ -124,14 +124,43 @@ pub fn instance_alive() -> bool {
 }
 
 /// 返回 true = 本进程是唯一实例；false = 已有实例在跑。
-pub fn acquire_single_instance() -> bool {
+/// 拿单实例互斥。
+///
+/// **提权重启后必须等**：父进程刚 `ShellExecuteExW` 就退出，但它持有的互斥句柄要等
+/// 进程真正结束才释放。子进程（提权后的自己）如果恰好在那个窗口期醒来，
+/// `CreateMutexW` 返回 `ERROR_ALREADY_EXISTS`，然后弹一句"已在运行"就退——
+/// 用户看到的是"点了没反应、什么都没起来"。
+///
+/// 但**普通重复启动不该等**：用户双击第二次，应该立刻看到"已在运行"。
+/// 所以只在 `after_elevate`（命令行带 `--after-elevate`，由
+/// [`zx_core::win::relaunch_elevated`] 自动加上）时拉长重试窗口。
+pub fn acquire_single_instance(after_elevate: bool) -> bool {
+    // 提权：8 × 200ms = 1.6s，够父进程退干净；普通启动：3 × 120ms，肉眼几乎无感
+    let (tries, gap) = if after_elevate { (8usize, 200u64) } else { (3, 120) };
+    for i in 0..tries {
+        if try_acquire_single_instance() {
+            return true;
+        }
+        if i + 1 < tries {
+            std::thread::sleep(std::time::Duration::from_millis(gap));
+        }
+    }
+    false
+}
+
+fn try_acquire_single_instance() -> bool {
     unsafe {
         let name = zx_core::win::wide(MUTEX_NAME);
         match windows::Win32::System::Threading::CreateMutexW(None, false, windows::core::PCWSTR(name.as_ptr())) {
             Ok(h) => {
                 let already = windows::Win32::Foundation::GetLastError() == windows::Win32::Foundation::ERROR_ALREADY_EXISTS;
+                if already {
+                    // 不是自己的，句柄留着没用（也别覆盖已存的那个）
+                    let _ = windows::Win32::Foundation::CloseHandle(h);
+                    return false;
+                }
                 *MUT_EX_HANDLE.lock().unwrap_or_else(|p| p.into_inner()) = Some(h.0 as isize);
-                !already
+                true
             }
             Err(_) => true,
         }

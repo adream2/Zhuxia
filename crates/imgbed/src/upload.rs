@@ -124,7 +124,7 @@ pub fn upload_one(
         bytes: prep.bytes,
         content_type: prep.content_type,
     };
-    let uploaded = backend.upload(&req)?;
+    let uploaded = upload_with_retry(backend, &req)?;
     let rel = if uploaded.path.is_empty() { req.path() } else { uploaded.path.clone() };
     let url = if uploaded.url.is_empty() { backend.url(&rel)? } else { uploaded.url };
     let text = link::render(&cfg.copy_format, &url, &req.name);
@@ -143,6 +143,53 @@ pub fn upload_one(
     };
     history::add(record.clone());
     Ok(Outcome { record, text, note: prep.note })
+}
+
+/// 最多试几次（含第一次）。
+const ATTEMPTS: usize = 3;
+/// 两次尝试之间等多久。第一次短，别让人觉得卡住。
+const BACKOFF_MS: [u64; ATTEMPTS - 1] = [200, 600];
+
+/// 可重试的失败自动重试。
+///
+/// provider 层早就在用 `Fail::retry` 标注"这类错误重试有效"（GitHub 409 同名冲突、
+/// 429 限流、5xx），但一直没人读这个字段——表现是"文件刚被创建所以冲突"这种
+/// 隔几百毫秒就成功的场景直接报失败。这里把它接上：**只有 `retryable` 才重试**，
+/// 401/422 立刻返回，不做无谓的等待。
+fn upload_with_retry(backend: &dyn Backend, req: &crate::provider::UploadRequest) -> Result<crate::provider::Uploaded, Fail> {
+    retry_upload(ATTEMPTS, &BACKOFF_MS, || backend.upload(req))
+}
+
+/// 重试循环本体。次数与退避作为参数传进来，测试可以传 0 让它跑得飞快。
+fn retry_upload(
+    attempts: usize,
+    backoff_ms: &[u64],
+    mut call: impl FnMut() -> Result<crate::provider::Uploaded, Fail>,
+) -> Result<crate::provider::Uploaded, Fail> {
+    let mut tried = 0;
+    loop {
+        match call() {
+            Ok(v) => return Ok(v),
+            Err(e) => {
+                tried += 1;
+                if !e.retryable || tried >= attempts {
+                    if tried > 1 {
+                        zx_core::log::warn(format!("上传重试 {tried} 次仍失败：{}", e.message));
+                    }
+                    return Err(e);
+                }
+                let wait = backoff_ms.get(tried - 1).copied().unwrap_or(0);
+                zx_core::log::info(format!(
+                    "上传失败（{}），{wait}ms 后第 {} 次重试",
+                    e.stage,
+                    tried
+                ));
+                if wait > 0 {
+                    std::thread::sleep(std::time::Duration::from_millis(wait));
+                }
+            }
+        }
+    }
 }
 
 fn can_convert(ext: &str) -> bool {
@@ -267,5 +314,90 @@ mod tests {
         assert_eq!(human(512), "512 B");
         assert_eq!(human(2048), "2 KB");
         assert_eq!(human(3 * 1024 * 1024), "3.0 MB");
+    }
+
+    // ---- 重试：消费 Fail::retryable ----
+
+    struct Flaky {
+        fails: usize,
+        retryable: bool,
+        calls: std::sync::atomic::AtomicUsize,
+    }
+
+    impl Flaky {
+        fn new(fails: usize, retryable: bool) -> Self {
+            Flaky { fails, retryable, calls: std::sync::atomic::AtomicUsize::new(0) }
+        }
+    }
+
+    impl crate::provider::Backend for Flaky {
+        fn caps(&self) -> crate::provider::Caps {
+            crate::provider::Caps::default()
+        }
+        fn test(&self) -> Result<crate::provider::TestReport, Fail> {
+            Err(Fail::new("未实现", ""))
+        }
+        fn upload(&self, req: &crate::provider::UploadRequest) -> Result<crate::provider::Uploaded, Fail> {
+            use std::sync::atomic::Ordering;
+            let n = self.calls.fetch_add(1, Ordering::SeqCst);
+            if n < self.fails {
+                return Err(if self.retryable {
+                    Fail::retry("冲突", "刚被创建")
+                } else {
+                    Fail::new("认证失败", "token 无效")
+                });
+            }
+            Ok(crate::provider::Uploaded { path: req.path(), url: "https://x/y".into() })
+        }
+        fn list_dirs(&self, _d: &str) -> Result<Vec<String>, Fail> {
+            Ok(Vec::new())
+        }
+        fn list_images(&self, _d: &str) -> Result<Vec<crate::provider::RemoteImage>, Fail> {
+            Ok(Vec::new())
+        }
+        fn delete(&self, _p: &str) -> Result<(), Fail> {
+            Ok(())
+        }
+        fn url(&self, p: &str) -> Result<String, Fail> {
+            Ok(p.to_string())
+        }
+    }
+
+    fn req() -> crate::provider::UploadRequest {
+        crate::provider::UploadRequest {
+            dir: "2026/11".into(),
+            name: "a.png".into(),
+            bytes: vec![1, 2, 3],
+            content_type: "image/png",
+        }
+    }
+
+    #[test]
+    fn retries_retryable_failures_then_succeeds() {
+        let b = Flaky::new(2, true);
+        let got = retry_upload(3, &[0, 0], || b.upload(&req()));
+        assert!(got.is_ok(), "第三次应该成功");
+        assert_eq!(b.calls.load(std::sync::atomic::Ordering::SeqCst), 3);
+    }
+
+    #[test]
+    fn gives_up_after_attempts() {
+        let b = Flaky::new(9, true);
+        let got = retry_upload(3, &[0, 0], || b.upload(&req()));
+        assert!(got.is_err());
+        assert_eq!(b.calls.load(std::sync::atomic::Ordering::SeqCst), 3, "只试 3 次，不无限重试");
+    }
+
+    #[test]
+    fn does_not_retry_non_retryable() {
+        let b = Flaky::new(9, false);
+        let got = retry_upload(3, &[0, 0], || b.upload(&req()));
+        assert!(got.is_err());
+        assert_eq!(b.calls.load(std::sync::atomic::Ordering::SeqCst), 1, "401/422 一次就返回，不做无谓等待");
+    }
+
+    #[test]
+    fn backoff_array_matches_attempts() {
+        assert_eq!(BACKOFF_MS.len(), ATTEMPTS - 1);
     }
 }

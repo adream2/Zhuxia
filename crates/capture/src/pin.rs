@@ -31,6 +31,9 @@ struct Pin {
     drag: Option<(POINT, RECT)>,
 }
 
+// SAFETY: 同样只是为了能放进 `static Mutex`（`Pin` 里有一个 `Canvas`）。
+// 贴图窗口在 UI 线程创建、绘制、销毁；`Canvas` 的线程亲和性见 `zx_ui::painter::Canvas`
+// 的 SAFETY 说明——跨线程用会崩在 GDI+ 里。
 unsafe impl Send for Pin {}
 
 fn pins() -> &'static Mutex<HashMap<isize, Box<Pin>>> {

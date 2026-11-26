@@ -218,15 +218,14 @@ fn query_disk(e: &mut Entry) -> bool {
     if dt <= 0 {
         zero(&mut e.info);
     } else {
-        let idle = perf.idle_time - e.prev.idle_time;
-        let util = if idle < dt { (1.0 - idle as f64 / dt as f64) * 100.0 } else { 0.0 };
+        let idle = perf.idle_time.saturating_sub(e.prev.idle_time);
         let secs = dt as f64 / 10_000_000.0;
         let read = (((perf.bytes_read - e.prev.bytes_read) as f64) / secs) as i64;
         let write = (((perf.bytes_written - e.prev.bytes_written) as f64) / secs) as i64;
         let mut resp = ((perf.write_time - e.prev.write_time) + (perf.read_time - e.prev.read_time)) as f64 / 10_000.0;
         let reads = perf.read_count as i64 - e.prev.read_count as i64;
         if reads != 0 { resp /= reads as f64; }
-        e.info.util = util.clamp(0.0, 100.0);
+        e.info.util = super::busy_pct(idle, dt);
         e.info.read = read.max(0);
         e.info.write = write.max(0);
         e.info.response_ms = resp.max(0.0);

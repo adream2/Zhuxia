@@ -119,30 +119,64 @@ pub fn copy_to_clipboard(canvas: &Canvas) -> bool {
 
 /// 存 PNG。文件名带时间戳，重名自动加后缀。
 pub fn save_png(canvas: &Canvas, dir: &Path) -> Option<PathBuf> {
+    save_png_as(canvas, dir, "截图")
+}
+
+/// 同上，但自己给文件名前缀（元素存图标用 `图标_名字`）。
+pub fn save_png_as(canvas: &Canvas, dir: &Path, prefix: &str) -> Option<PathBuf> {
     let png = canvas.png_bytes()?;
     if std::fs::create_dir_all(dir).is_err() {
-        zx_core::log::warn(format!("截图目录创建失败：{}", dir.display()));
+        zx_core::log::warn(format!("图片目录创建失败：{}", dir.display()));
         return None;
     }
     // 时间戳只取一次：之前每轮都重新取，跨秒时会生成一组不一致的文件名
     let base = stamp();
-    let mut path = dir.join(format!("截图_{base}.png"));
+    let mut path = dir.join(format!("{prefix}_{base}.png"));
     let mut n = 1;
     while path.exists() {
         n += 1;
         if n > 9999 {
-            zx_core::log::warn("截图保存失败：同一秒内重名次数过多");
+            zx_core::log::warn("保存失败：同一秒内重名次数过多");
             return None;
         }
-        path = dir.join(format!("截图_{base}-{n}.png"));
+        path = dir.join(format!("{prefix}_{base}-{n}.png"));
     }
     match std::fs::write(&path, &png) {
         Ok(()) => Some(path),
         Err(e) => {
-            zx_core::log::warn(format!("截图写盘失败 {}：{e}", path.display()));
+            zx_core::log::warn(format!("写盘失败 {}：{e}", path.display()));
             None
         }
     }
+}
+
+/// 把任意文本压成能当文件名的片段。
+///
+/// 去掉 Windows 不允许的 `\ / : * ? " < > |` 与控制字符，空白折成 `_`，
+/// 按**字符**而不是字节截断（中文不会截出半个字），再去掉首尾的 `_` 和 `.`
+/// （Windows 不允许文件名以点结尾）。
+pub fn safe_stem(s: &str, max: usize) -> String {
+    let mut out = String::new();
+    let mut last_space = false;
+    for ch in s.trim().chars() {
+        if ch.is_control() || matches!(ch, '\\' | '/' | ':' | '*' | '?' | '"' | '<' | '>' | '|') {
+            continue;
+        }
+        if ch.is_whitespace() {
+            if last_space || out.is_empty() {
+                continue;
+            }
+            last_space = true;
+            out.push('_');
+            continue;
+        }
+        last_space = false;
+        out.push(ch);
+        if out.chars().count() >= max {
+            break;
+        }
+    }
+    out.trim_matches(|c| c == '_' || c == '.').to_string()
 }
 
 fn stamp() -> String {
@@ -233,6 +267,17 @@ fn make_bitmap(canvas: &Canvas) -> HBITMAP {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn safe_stem_cleans_filenames() {
+        assert_eq!(safe_stem("保存(&S)", 20), "保存(&S)");
+        assert_eq!(safe_stem("a/b:c*?", 20), "abc");
+        assert_eq!(safe_stem("  多  空  白  ", 20), "多_空_白");
+        // 按字符截断：中文不会截出半个字
+        assert_eq!(safe_stem("很长很长很长", 3), "很长很");
+        // 全是非法字符就说不出名字了，交给调用方兜底
+        assert_eq!(safe_stem("...", 10), "");
+    }
 
     #[test]
     fn dib_header_matches_canvas() {

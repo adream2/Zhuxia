@@ -16,6 +16,7 @@ use windows::core::PCWSTR;
 use windows::Win32::Foundation::{ERROR_SUCCESS, WIN32_ERROR};
 use windows::Win32::System::Registry::{HKEY, HKEY_CURRENT_USER, KEY_READ, KEY_WRITE, REG_OPTION_NON_VOLATILE, REG_SZ, RegCloseKey, RegCreateKeyExW, RegDeleteTreeW, RegGetValueW, RegOpenKeyExW, RegSetKeyValueW, RRF_RT_REG_SZ};
 use windows::Win32::UI::Shell::{SHChangeNotify, SHCNE_ASSOCCHANGED, SHCNF_IDLIST};
+use crate::win::wide;
 
 /// 一个右键菜单动词的静态描述。
 pub struct VerbSpec {
@@ -33,10 +34,6 @@ pub struct VerbSpec {
     pub exts: &'static [&'static str],
     /// 子菜单每一项：(id, 默认值文案, MUIVerb 文案)。id 同时是命令行参数。
     pub items: fn() -> Vec<(&'static str, String, String)>,
-}
-
-fn wide(s: &str) -> Vec<u16> {
-    s.encode_utf16().chain(std::iter::once(0)).collect()
 }
 
 fn hkcu() -> HKEY {

@@ -7,7 +7,6 @@ license.workspace = true
 [dependencies]
 zx-core.workspace = true
 zx-ui.workspace = true
-serde.workspace = true
 serde_json.workspace = true
 libloading.workspace = true
 
@@ -40,7 +39,6 @@ features = [
   "Win32_NetworkManagement_WiFi",
   "Win32_NetworkManagement_WindowsFirewall",
   "Win32_Networking_WinSock",
-  "Win32_Networking_WinHttp",
   "Wdk_System_SystemInformation",
   "Win32_System_Diagnostics_Debug",
   "Win32_System_Diagnostics_Etw",

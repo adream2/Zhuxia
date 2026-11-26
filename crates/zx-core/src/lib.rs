@@ -3,13 +3,16 @@
 //! 与 UI 无关，可被任意模块复用。
 
 pub mod batch;
+pub mod borrow;
 pub mod cfg;
 pub mod fmt;
 pub mod hotkey;
+pub mod http;
 pub mod log;
 pub mod monitor;
 pub mod pipe;
 pub mod shell;
+pub mod store;
 pub mod win;
 
 pub use monitor::{displays, DisplayInfo};

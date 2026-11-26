@@ -15,6 +15,7 @@ use std::sync::Mutex;
 
 use windows::core::PCWSTR;
 use windows::Win32::Networking::WinHttp::*;
+use zx_core::win::wide;
 
 /// 主源（RapidOCR 的 PP-OCRv4 中文模型）。
 const HF_MIRROR: &str = "https://hf-mirror.com/SWHL/RapidOCR/resolve/main";
@@ -310,10 +311,6 @@ fn fetch_to_file(url: &str, dest: &Path, label: &str) -> Result<(), String> {
     }
     std::fs::rename(&part, dest).map_err(|e| cleanup(format!("改名失败：{e}")))?;
     Ok(())
-}
-
-fn wide(s: &str) -> Vec<u16> {
-    s.encode_utf16().chain(std::iter::once(0)).collect()
 }
 
 /// 拆 `https://host[:port]/path`。

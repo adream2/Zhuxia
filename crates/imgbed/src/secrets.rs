@@ -83,8 +83,54 @@ fn unprotect(bytes: &[u8], entropy: &[u8]) -> Option<Vec<u8>> {
     Some(take(out))
 }
 
+/// 缓存项：内容 + 它对应的磁盘戳（mtime, 长度）。
+struct Cached {
+    map: BTreeMap<String, String>,
+    stamp: Option<(std::time::SystemTime, u64)>,
+}
+
+/// 进程内缓存。
+///
+/// 以前每次 `get()` 都要**读整份文件 + DPAPI 解密 + JSON 反序列化**。面板每次返回
+/// 状态都会调 `set_keys()`，`write()` 又先 `all()` 再加密整份——
+/// "改一个字段"= 解密全表 + 加密全表。缓存之后这些全变成一次内存查询。
+///
+/// **必须带磁盘戳**：常驻进程和设置面板是两个进程，都读写同一个 `secrets.dat`。
+/// 纯内存缓存会让"面板改了 token、常驻进程还在用旧 token"变成必然——上传 401，
+/// 用户只能重启程序。`stat` 比 DPAPI 解密便宜几个数量级，每次比对完全划算。
+/// （`cfg` 有 `reload()` 做同样的事，这里以前没有。）
+static CACHE: std::sync::Mutex<Option<Cached>> = std::sync::Mutex::new(None);
+
+fn lock_cache() -> std::sync::MutexGuard<'static, Option<Cached>> {
+    CACHE.lock().unwrap_or_else(|p| p.into_inner())
+}
+
+/// 磁盘戳。文件不存在时返回 None（与"存在但为空"区分开）。
+fn stamp() -> Option<(std::time::SystemTime, u64)> {
+    let m = std::fs::metadata(path()).ok()?;
+    let t = m.modified().ok()?;
+    Some((t, m.len()))
+}
+
 /// 读全部密钥。解不开/损坏时返回空表并记一条日志（不让整个模块崩）。
 pub fn all() -> BTreeMap<String, String> {
+    let now = stamp();
+    {
+        let g = lock_cache();
+        if let Some(c) = g.as_ref() {
+            if c.stamp == now {
+                return c.map.clone();
+            }
+        }
+    }
+    // 戳变了（别的进程写过）或还没读过：重新解密
+    let map = load_from_disk();
+    *lock_cache() = Some(Cached { map: map.clone(), stamp: stamp() });
+    map
+}
+
+/// 真正的读盘 + 解密。只在缓存未命中时走一次。
+fn load_from_disk() -> BTreeMap<String, String> {
     migrate_legacy();
     let Ok(bytes) = std::fs::read(path()) else {
         return BTreeMap::new();
@@ -97,9 +143,11 @@ pub fn all() -> BTreeMap<String, String> {
         zx_core::log::warn("图床：secrets.dat 解不开（换了 Windows 账号？），请重新填密钥");
         return BTreeMap::new();
     };
-    let text = String::from_utf8_lossy(&plain).to_string();
+    // 走 &[u8] 直接反序列化，不经 String：`from_utf8_lossy` 会复制出一份**不会被清零**
+    // 的副本，明文在堆上多留一份到它自然释放为止。
+    let out = serde_json::from_slice::<BTreeMap<String, String>>(&plain).unwrap_or_default();
     zero(&mut plain);
-    serde_json::from_str(&text).unwrap_or_default()
+    out
 }
 
 pub fn get(key: &str) -> Option<String> {
@@ -140,9 +188,9 @@ fn write(map: &BTreeMap<String, String>) -> Result<(), String> {
     let mut sealed = Vec::with_capacity(MAGIC.len() + body.len());
     sealed.extend_from_slice(MAGIC);
     sealed.extend_from_slice(&body);
-    let tmp = path().with_extension("dat.tmp");
-    std::fs::write(&tmp, &sealed).map_err(|e| format!("写密钥失败：{e}"))?;
-    std::fs::rename(&tmp, path()).map_err(|e| format!("保存密钥失败：{e}"))?;
+    zx_core::store::write_atomic(&path(), &sealed).map_err(|e| format!("保存密钥失败：{e}"))?;
+    // 落盘成功才更新缓存：失败时内存里不能有一份"其实没存上"的值
+    *lock_cache() = Some(Cached { map: map.clone(), stamp: stamp() });
     Ok(())
 }
 
@@ -165,9 +213,9 @@ fn migrate_legacy() {
         let Ok(bytes) = std::fs::read(path()) else { return };
         let Some(body) = bytes.strip_prefix(MAGIC.as_slice()) else { return };
         let Some(mut p) = unprotect(body, ENTROPY) else { return };
-        let text = String::from_utf8_lossy(&p).to_string();
+        let m = serde_json::from_slice::<BTreeMap<String, String>>(&p).unwrap_or_default();
         zero(&mut p);
-        serde_json::from_str::<BTreeMap<String, String>>(&text).unwrap_or_default()
+        m
     };
     map.entry("github.token".into()).or_insert(token);
     if write(&map).is_ok() {

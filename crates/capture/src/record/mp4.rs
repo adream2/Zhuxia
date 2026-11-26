@@ -22,13 +22,10 @@ use windows::core::PCWSTR;
 use windows::Win32::Media::MediaFoundation::*;
 
 use super::source::FrameBuf;
+use zx_core::win::wide;
 
 fn pack(a: u32, b: u32) -> u64 {
     ((a as u64) << 32) | b as u64
-}
-
-fn wide(s: &str) -> Vec<u16> {
-    s.encode_utf16().chain(std::iter::once(0)).collect()
 }
 
 fn mf_err(what: &str, e: windows::core::Error) -> std::io::Error {

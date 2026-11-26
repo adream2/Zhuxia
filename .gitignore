@@ -1,5 +1,8 @@
 # 构建产物
 /target/
+# 本地打包产物（手动测试用）
+/_pkg/
+
 /crates/zhuxia/gen/
 /site/_site/
 /_site/

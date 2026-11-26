@@ -8,6 +8,7 @@
 
 
 mod modules;
+mod ocr_ai;
 mod panel;
 
 fn main() {
@@ -50,6 +51,42 @@ fn main() {
         if let Some(code) = imgbed::handle_cli(&args) {
             std::process::exit(code);
         }
+    }
+
+    // OCR 翻译/AI 探活：排查"接口通不通"用，同样要在提权闸门之前——
+    // 提权会把参数丢给子进程，子进程的输出不在当前控制台上。
+    if std::env::args().any(|a| a == "--ocr-ai-probe") {
+        zx_ui::window::init_dpi();
+        let _ = zx_core::cfg::load();
+        let args: Vec<String> = std::env::args().collect();
+        let i = args.iter().position(|a| a == "--ocr-ai-probe").unwrap_or(0);
+        let kind = args.get(i + 1).cloned().unwrap_or_else(|| "translate".into());
+        // 第三个参数可以给要翻的原文，不给自己用内置样本
+        let sample = args.get(i + 2).cloned().unwrap_or_else(|| {
+            if kind == "ai" {
+                "这是一段测试文本，用来确认 AI 接口通不通。".into()
+            } else {
+                "Hello, world. This is a connectivity test.".into()
+            }
+        });
+        // 第四个参数可以指定目标语言：--ocr-ai-probe translate "你好" en
+        let to = args.get(i + 3).cloned().unwrap_or_else(|| "auto".into());
+        let r: Result<(String, Option<String>), String> = if kind == "ai" {
+            ocr_ai::polish(&sample).map(|t| (t, None))
+        } else {
+            ocr_ai::translate(&sample, &to)
+        };
+        match r {
+            Ok((t, warn)) => {
+                if let Some(w) = warn { println!("WARN: {w}"); }
+                println!("OK: {t}")
+            }
+            Err(e) => {
+                println!("FAIL: {e}");
+                std::process::exit(1);
+            }
+        }
+        std::process::exit(0);
     }
 
     // 图标提取：同样是右键/快捷方式调起的短命进程，也必须放在提权闸门之前。
@@ -227,7 +264,9 @@ fn main() {
                 c.startup_guide_completed = Some(false);
             });
         }
-        if zx_core::win::relaunch_elevated() {
+        // 参数要带过去：UAC 重启丢参数会让 `--open-settings` 这类一次性命令失效
+        let args: Vec<String> = std::env::args().skip(1).collect();
+        if zx_core::win::relaunch_elevated(&args) {
             zx_core::log::info("已请求提权重启");
             return;
         }
@@ -235,7 +274,9 @@ fn main() {
     }
 
     // ---- 2. 单实例 ----
-    if !taskmon::runtime::acquire_single_instance() {
+    // 提权重启后的自己要多等一会儿：父进程可能还没退干净（见 runtime 里的注释）
+    let after_elevate = std::env::args().any(|a| a == zx_core::win::AFTER_ELEVATE_ARG);
+    if !taskmon::runtime::acquire_single_instance(after_elevate) {
         // 已经有一个在跑：带 --open-settings 就让它把设置面板叫出来，否则提示一下
         if std::env::args().any(|a| a == "--open-settings") {
             taskmon::runtime::signal_open_settings();

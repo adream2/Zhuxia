@@ -6,7 +6,7 @@
 //! - 分类用顶部胶囊页签：全部 / 文本 / 链接 / 图片 / 文件 / 收藏；
 //! - 收藏 = 置顶：收藏的条目固定在最前，行尾有书签标记，重复点一下取消。
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 
 use windows::core::PCWSTR;
@@ -66,6 +66,8 @@ const TAB_LABELS: [(&str, Tab); 7] = [
 
 thread_local! {
     static PANEL: RefCell<*mut Panel> = const { RefCell::new(std::ptr::null_mut()) };
+    /// 借用计数：同时持有两个 `&mut Panel` 是 UB，debug 下由 `borrow::Ref` 断言拦住。
+    static BORROW: Cell<u32> = const { Cell::new(0) };
 }
 
 // 跨线程只靠 HWND 通信：采集线程/热键线程不能碰 UI 线程的 thread_local。
@@ -968,9 +970,9 @@ impl Panel {
         std::thread::sleep(std::time::Duration::from_millis(55));
         if !crate::paste::paste_entry(id, plain, false, Some(self.target)) {
             show(true);
-            if let Some(p) = panel_of(self.hwnd) {
-                p.toast("粘贴失败：内容已不可用");
-            }
+            // 这里本来又走了一遍 `panel_of(self.hwnd)`——`self` 就是那个 `&mut Panel`，
+            // 再取一次等于两个 `&mut` 同时存活。直接用 `self`。
+            self.toast("粘贴失败：内容已不可用");
         }
     }
 
@@ -2056,11 +2058,21 @@ fn sync_search() {
     });
 }
 
-fn panel_of(hwnd: HWND) -> Option<&'static mut Panel> {
+/// 取当前面板状态。
+///
+/// 返回的是借用守卫（`Deref` 到 `Panel`），不是 `&'static mut`——**同一个函数里
+/// 嵌套取两次是 UB**，以前只能靠约定，现在 debug 构建会直接断言。需要面板自己的
+/// 时候用 `self`，别绕回来再取一次。
+///
+/// **覆盖范围**：只覆盖经过本函数取状态的路径。`show_now` / `hide_now` 直接走
+/// `PANEL` 的裸指针（它们要处理"还没建出面版"的情况），不在计数之内——所以在
+/// 一个已经持有守卫的方法里调用 `show()`，守卫看不见。这类调用目前只有
+/// `Panel::paste` 一处，已经改成直接用 `self`，后续也别再加。
+fn panel_of(hwnd: HWND) -> Option<zx_core::borrow::Ref<Panel>> {
     PANEL.with(|p| {
         let ptr = *p.borrow();
         if !ptr.is_null() && unsafe { (*ptr).hwnd } == hwnd {
-            unsafe { Some(&mut *ptr) }
+            Some(unsafe { zx_core::borrow::Ref::new(ptr, &BORROW, "剪贴板面板") })
         } else {
             None
         }
@@ -2079,7 +2091,7 @@ unsafe fn panel_proc_inner(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -> LRESUL
             // 必须 BeginPaint/EndPaint：不校验更新区域会无限重绘。
             let mut ps = PAINTSTRUCT::default();
             let hdc = BeginPaint(hwnd, &mut ps);
-            if let Some(p) = panel_of(hwnd) {
+            if let Some(mut p) = panel_of(hwnd) {
                 p.draw_to(hdc);
             }
             let _ = EndPaint(hwnd, &ps);
@@ -2092,12 +2104,13 @@ unsafe fn panel_proc_inner(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -> LRESUL
         }
         WM_ERASEBKGND => return LRESULT(1),
         WM_SIZE => {
-            if let Some(p) = panel_of(hwnd) {
+            if let Some(mut p) = panel_of(hwnd) {
                 let mut r = RECT::default();
                 let _ = GetClientRect(hwnd, &mut r);
-                p.w = (r.right - r.left).max(1);
-                p.h = (r.bottom - r.top).max(1);
-                p.canvas.resize(p.w, p.h);
+                let (pw, ph) = ((r.right - r.left).max(1), (r.bottom - r.top).max(1));
+                p.w = pw;
+                p.h = ph;
+                p.canvas.resize(pw, ph);
                 if p.fallback_region {
                     zx_ui::painter::set_round_region(hwnd, p.w, p.h, zx_core::win::dpi_scale_i(12.0, p.dpi));
                 }
@@ -2149,7 +2162,7 @@ unsafe fn panel_proc_inner(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -> LRESUL
             return LRESULT(0);
         }
         WM_MOUSEMOVE => {
-            if let Some(p) = panel_of(hwnd) {
+            if let Some(mut p) = panel_of(hwnd) {
                 let x = (l.0 & 0xFFFF) as i16 as f32;
                 let y = ((l.0 >> 16) & 0xFFFF) as i16 as f32;
                 let idx = p.row_at(x, y);
@@ -2186,7 +2199,7 @@ unsafe fn panel_proc_inner(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -> LRESUL
             return LRESULT(0);
         }
         0x02A3 => { // WM_MOUSELEAVE
-            if let Some(p) = panel_of(hwnd) {
+            if let Some(mut p) = panel_of(hwnd) {
                 p.hover = -1;
                 p.hover_pin = -1;
                 p.hide_card();
@@ -2195,7 +2208,7 @@ unsafe fn panel_proc_inner(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -> LRESUL
             return LRESULT(0);
         }
         WM_LBUTTONDOWN => {
-            if let Some(p) = panel_of(hwnd) {
+            if let Some(mut p) = panel_of(hwnd) {
                 let x = (l.0 & 0xFFFF) as i16 as f32;
                 let y = ((l.0 >> 16) & 0xFFFF) as i16 as f32;
                 p.hide_card();
@@ -2215,7 +2228,7 @@ unsafe fn panel_proc_inner(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -> LRESUL
             return LRESULT(0);
         }
         WM_RBUTTONUP => {
-            if let Some(p) = panel_of(hwnd) {
+            if let Some(mut p) = panel_of(hwnd) {
                 let x = (l.0 & 0xFFFF) as i16 as f32;
                 let y = ((l.0 >> 16) & 0xFFFF) as i16 as f32;
                 p.hide_card();
@@ -2228,7 +2241,7 @@ unsafe fn panel_proc_inner(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -> LRESUL
             return LRESULT(0);
         }
         WM_MOUSEWHEEL => {
-            if let Some(p) = panel_of(hwnd) {
+            if let Some(mut p) = panel_of(hwnd) {
                 let delta = ((w.0 >> 16) & 0xFFFF) as i16 as i32;
                 let step = if delta > 0 { -1 } else { 1 };
                 let max_scroll = p.entries.len().saturating_sub(p.rows_visible());
@@ -2242,7 +2255,7 @@ unsafe fn panel_proc_inner(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -> LRESUL
             return LRESULT(0);
         }
         0x0100 => {
-            if let Some(p) = panel_of(hwnd) {
+            if let Some(mut p) = panel_of(hwnd) {
                 let ctrl = GetKeyState(VK_CONTROL.0 as i32) < 0;
                 let shift = GetKeyState(VK_SHIFT.0 as i32) < 0;
                 let alt = GetKeyState(VK_MENU.0 as i32) < 0;
@@ -2253,7 +2266,7 @@ unsafe fn panel_proc_inner(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -> LRESUL
             }
         }
         WM_TIMER => {
-            if let Some(p) = panel_of(hwnd) {
+            if let Some(mut p) = panel_of(hwnd) {
                 if w.0 == 2 {
                     let _ = KillTimer(hwnd, 2);
                     let pending = p.pending_card;
@@ -2275,7 +2288,7 @@ unsafe fn panel_proc_inner(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -> LRESUL
         }
         WM_ACTIVATE => {
             let active = (w.0 & 0xFFFF) != 0;
-            if let Some(p) = panel_of(hwnd) {
+            if let Some(mut p) = panel_of(hwnd) {
                 if !active && !p.pinned && !p.in_dialog && crate::model::now_ms() - p.shown_at > 250 {
                     let _ = ShowWindow(hwnd, SW_HIDE);
                     p.hide_card();
@@ -2284,13 +2297,13 @@ unsafe fn panel_proc_inner(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -> LRESUL
         }
         WM_CLOSE => {
             let _ = ShowWindow(hwnd, SW_HIDE);
-            if let Some(p) = panel_of(hwnd) {
+            if let Some(mut p) = panel_of(hwnd) {
                 p.hide_card();
             }
             return LRESULT(0);
         }
         zx_ui::window::WM_APP_RELOAD => {
-            if let Some(p) = panel_of(hwnd) {
+            if let Some(mut p) = panel_of(hwnd) {
                 p.sort = Sort::from_name(&crate::cfg().sort);
                 p.pinned = crate::cfg().window_pinned;
                 p.reload();
@@ -2300,7 +2313,7 @@ unsafe fn panel_proc_inner(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -> LRESUL
             return LRESULT(0);
         }
         WM_REFRESH => {
-            if let Some(p) = panel_of(hwnd) {
+            if let Some(mut p) = panel_of(hwnd) {
                 let keep = p.sel;
                 p.reload();
                 p.sel = keep.min(p.entries.len().saturating_sub(1));
@@ -2312,7 +2325,7 @@ unsafe fn panel_proc_inner(hwnd: HWND, msg: u32, w: WPARAM, l: LPARAM) -> LRESUL
             let ptr = w.0 as *mut String;
             if !ptr.is_null() {
                 let msg = unsafe { *Box::from_raw(ptr) };
-                if let Some(p) = panel_of(hwnd) {
+                if let Some(mut p) = panel_of(hwnd) {
                     p.toast(&msg);
                 }
             }

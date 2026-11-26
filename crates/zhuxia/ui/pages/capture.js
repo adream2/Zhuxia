@@ -4,6 +4,27 @@
 /* ---------- 截图 ---------- */
 const cappatch = (obj) => save("capture", obj);
 
+/* 探活：直接拿真实接口发一次请求，省得用户猜"到底通没通" */
+function testBtn(kind) {
+  const b = h("button", "btn", "测试");
+  b.onclick = async () => {
+    b.disabled = true;
+    const old = b.textContent;
+    b.textContent = "测试中…";
+    try {
+      const r = await inv("ocr_ai_probe", { kind });
+      if (r && r.ok) toast("通了：" + String(r.text).slice(0, 40));
+      else toast("失败：" + ((r && r.error) || "未知错误"));
+    } catch (e) {
+      toast("失败：" + String(e));
+    }
+    b.textContent = old;
+    b.disabled = false;
+  };
+  return b;
+}
+
+
 /* OCR 增强模型（PaddleOCR，可选下载） */
 let OCRP = null;
 let OCR_LOADING = false;
@@ -101,6 +122,17 @@ function pageCapture() {
   const c1 = h("div", "card");
   c1.append(row("放大镜", "跟随鼠标，显示像素与颜色值（#RRGGBB）", sw(v.magnifier, (x) => cappatch({ magnifier: x }))));
   c1.append(row("窗口识别", "高亮鼠标下的窗口/控件，滚轮在控件→窗口→屏幕之间切换", sw(v.detectWindow, (x) => cappatch({ detectWindow: x }))));
+  if (v.uielemDisabled) {
+    // 卡死的程序会把采集线程拖住，连续三次就自动停用（10 分钟后自恢复）。
+    // 用户关掉那个程序后想立刻恢复，不该被迫重启整个托盘程序。
+    const restore = h("button", "btn", "立即恢复");
+    restore.onclick = async () => {
+      const r = await inv("uielem_reset");
+      if (r && r.state) { S.capture = r.state; render(); }
+      toast("元素识别已恢复");
+    };
+    c1.append(row("元素识别已停用", "有程序不响应 UI 自动化，连续卡死 3 次后自动关闭（10 分钟后自动重试）。关掉那个程序后可以点右边立刻恢复", restore));
+  }
   frag.append(c1);
 
   frag.append(h("h2", "", "OCR 增强（PaddleOCR，可选）"));
@@ -195,6 +227,70 @@ function pageCapture() {
     del));
 
   frag.append(oc);
+
+  // ---- OCR 的翻译与 AI ----
+  frag.append(h("h2", "", "OCR 翻译与 AI"));
+  const ai = h("div", "card");
+  ai.append(h("div", "hint", "识别结果窗口底部的「翻译」「AI 整理」用的就是这里的配置。翻译留空即可用内置免费接口（有道，国内直连、不需要 key）。"));
+
+  ai.append(row("翻译接口", "留空 = 内置免费接口（需要先在下面允许一次）。填了就 POST {\"text\":\"...\"}，期望返回 {\"text\":\"...\"}",
+    textInput(v.translateUrl, "留空使用内置免费接口", (x) => cappatch({ translateUrl: x })),
+    false, testBtn("translate")));
+
+  ai.append(row("翻译默认语言", "只决定结果窗口的初始选择——识别完可以在窗口里临时换，自动 = 有中文译成英文，否则译成中文",
+    sel([["auto", "自动"], ["zh", "中文"], ["en", "英文"], ["ja", "日语"], ["ko", "韩语"],
+         ["fr", "法语"], ["de", "德语"], ["es", "西班牙语"], ["ru", "俄语"]],
+      v.translateTo || "auto", (x) => cappatch({ translateTo: x }))));
+
+  // 内置接口 = 把正文发给第三方。这是个隐私开关，默认关，且不藏在折叠区里。
+  const consent = h("input");
+  consent.type = "checkbox";
+  consent.checked = !!v.translateConsent;
+  consent.onchange = () => cappatch({ translateConsent: consent.checked });
+  ai.append(row("允许内置翻译", "内置接口会把识别到的文字发送到有道 / Google 的免费接口。内容可能含密码或私聊，所以默认关闭；填了自建「翻译接口」就不需要它", consent));
+
+  ai.append(row("AI 接口", "OpenAI 兼容的 base，例如 https://api.openai.com/v1、https://api.deepseek.com/v1",
+    textInput(v.aiBaseUrl, "https://api.openai.com/v1", (x) => cappatch({ aiBaseUrl: x })),
+    false, testBtn("ai")));
+
+  const keyInput = h("input");
+  keyInput.type = "password";
+  keyInput.value = "";
+  keyInput.placeholder = v.aiKeySet ? "已保存（留空不改，输入新值即覆盖）" : "sk-...";
+  keyInput.style.minWidth = "220px";
+  keyInput.onchange = async () => {
+    const val = keyInput.value.trim();
+    if (!val) return; // 空 = 不改；要清空请点右边的「清除」
+    const r = await inv("capture_ai_key", { value: val });
+    if (r && r.ok === false) { toast(r.error || "保存失败"); return; }
+    keyInput.value = "";
+    keyInput.placeholder = "已保存（留空不改，输入新值即覆盖）";
+    toast("AI Key 已加密保存");
+  };
+  const clearKey = h("button", "btn", v.aiKeySet ? "清除" : "未设置");
+  clearKey.disabled = !v.aiKeySet;
+  clearKey.onclick = async () => {
+    const r = await inv("capture_ai_key", { value: "" });
+    if (r && r.ok === false) { toast(r.error || "清除失败"); return; }
+    keyInput.placeholder = "sk-...";
+    clearKey.textContent = "未设置";
+    clearKey.disabled = true;
+    toast("AI Key 已清除");
+  };
+  ai.append(row("AI Key", "存在 <exe>/imgbed/secrets.dat（DPAPI 加密，绑定当前 Windows 用户），不写 settings.yaml、不上传", keyInput,
+    false, clearKey));
+
+  ai.append(row("AI 模型", "例如 gpt-4o-mini / deepseek-chat / qwen-plus",
+    textInput(v.aiModel, "gpt-4o-mini", (x) => cappatch({ aiModel: x }))));
+
+  const prompt = h("textarea");
+  prompt.value = v.aiPrompt || "";
+  prompt.placeholder = "留空使用内置提示词：修错字、恢复换行段落、表格转 Markdown、代码保缩进，只输出正文";
+  prompt.rows = 3;
+  prompt.style.cssText = "min-width:320px;width:min(520px,48vw);resize:vertical;font:inherit;padding:6px 8px";
+  prompt.onchange = () => cappatch({ aiPrompt: prompt.value });
+  ai.append(row("AI 提示词", "可选。改坏了就清空回到默认", prompt));
+  frag.append(ai);
 
   frag.append(h("h2", "", "操作"));
   const help = h("div", "card");

@@ -103,10 +103,21 @@ fn pipe_protocol_roundtrip() {
     imgconv::pipe::serve(move |t, p| {
         let _ = tx.send((t, p));
     });
-    std::thread::sleep(std::time::Duration::from_millis(300));
 
     let path = PathBuf::from(r"C:\图片 目录\带 空格.jpg");
-    assert!(imgconv::pipe::send(&[(Target::WebP, path.clone())]), "客户端应能写入管道");
+    // `serve` 是异步起线程再 `CreateNamedPipeW`，**没有就绪信号**。
+    // 以前这里 `sleep(300ms)` 之后只发一次，机器一忙就发不出去（workspace 全量跑时
+    // 偶发失败，单跑必过）。改成"有界重试"：只要服务端在 3 秒内就绪就算通过。
+    // 产品侧不依赖这个：`cli_convert` 发不出去会降级为本地转换。
+    let mut sent = false;
+    for _ in 0..30 {
+        if imgconv::pipe::send(&[(Target::WebP, path.clone())]) {
+            sent = true;
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+    assert!(sent, "3 秒内客户端应能写入管道（服务端线程没起来？）");
     let (t, p) = rx.recv_timeout(std::time::Duration::from_secs(3)).expect("服务端应收到任务");
     assert_eq!(t, Target::WebP);
     assert_eq!(p, path);

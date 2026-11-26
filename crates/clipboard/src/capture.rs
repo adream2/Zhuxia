@@ -374,6 +374,22 @@ fn commit(mut entry: Entry, image_bytes: Option<Vec<u8>>) {
         }
     }
 
+    // ---- 超大记录：照常可用，但不进历史文件（原因见 store::MAX_PERSIST_BYTES）----
+    {
+        let html = entry.html.as_ref().map_or(0, |h| h.len());
+        if entry.content.len() + html > store::MAX_PERSIST_BYTES
+            && !entry.tags.iter().any(|t| t == "不保存")
+        {
+            entry.tags.push("不保存".into());
+            // 只在这一条第一次入库时打一行，别每次复制都刷屏
+            zx_core::log::info(format!(
+                "这条剪贴板内容 {:.1} MB，超过 {} MB 上限：本次会话可用，但不写历史文件",
+                (entry.content.len() + html) as f64 / 1048576.0,
+                store::MAX_PERSIST_BYTES / 1024 / 1024
+            ));
+        }
+    }
+
     // ---- 隐私识别：打 sensitive 标签（预览脱敏在面板里做）----
     if cfg.privacy
         && entry.kind.is_text()

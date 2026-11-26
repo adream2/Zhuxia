@@ -41,6 +41,14 @@ pub struct Canvas {
     brushes: HashMap<u32, *mut GpSolidFill>,
 }
 
+// SAFETY: 这个 `Send` **只是为了满足 `static Mutex<T>` 的约束**（`static` 要求 `T: Send`），
+// 不代表可以把值 move 到别的线程去用。Canvas 握着 HBITMAP / HDC 和 GDI+ 的
+// Graphics / Font / Brush，其中 GDI+ 是**按线程初始化**的（`GdiplusStartup` 每个使用
+// 线程各一次），跨线程使用或 `Drop` 会随机崩在 GDI+ 内部。
+//
+// 真正的用法约定：**创建、绘制、销毁都在同一个线程**（UI 线程，或某个专职工作线程
+// 自己 new 自己 drop）。目前所有调用点都满足；这条一旦被破坏，debug 构建也未必报错，
+// 而是变成偶发崩溃，所以改代码时请守住它。
 unsafe impl Send for Canvas {}
 
 /// 进程级 GDI+ 初始化。模块自己也会用到 GDI+（例如剪贴板把 DIB 编码成 PNG），

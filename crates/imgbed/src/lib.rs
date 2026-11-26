@@ -340,19 +340,52 @@ fn thumb_cache(path: &str, provider_id: &str, url: &str) -> Result<Vec<u8>, Stri
 }
 
 /// 灯箱取原图（公开链接；私有仓库请用缩略图/本地记录）。
+/// 取原图/缩略图的响应体上限。
+///
+/// 接口类请求走 `http::request` 的 8 MB 默认值；这里必须放宽——手机直出的原图
+/// 常在 10–20 MB，8 MB 会把"支持 30 MB"变成空头承诺（而且报错会误导成链接失效）。
+const MAX_FETCH: usize = 32 * 1024 * 1024;
+/// 面板侧声明的原图上限（解码前的字节数）。
+pub const MAX_IMAGE_BYTES: usize = 30 * 1024 * 1024;
+
 pub fn image_bytes(url: &str) -> Result<Vec<u8>, String> {
-    fetch_url(url, &cfg().proxy).ok_or_else(|| "取原图失败（链接不可访问或需要鉴权）".to_string())
+    let bytes = fetch_url_result(url, &cfg().proxy, MAX_FETCH)
+        .map_err(|e| format!("取原图失败：{e}"))?;
+    if bytes.len() > MAX_IMAGE_BYTES {
+        return Err(format!(
+            "原图 {:.1} MB，超过 {} MB 上限（请用「打开原图」）",
+            bytes.len() as f64 / 1048576.0,
+            MAX_IMAGE_BYTES / 1048576
+        ));
+    }
+    Ok(bytes)
 }
 
 fn fetch_url(url: &str, proxy: &str) -> Option<Vec<u8>> {
+    fetch_url_result(url, proxy, MAX_FETCH).ok()
+}
+
+/// 带原因的取图：失败时把真实原因（状态码 / 超限 / 网络）带出去。
+fn fetch_url_result(url: &str, proxy: &str, max_body: usize) -> Result<Vec<u8>, String> {
     if url.is_empty() || !(url.starts_with("https://") || url.starts_with("http://")) {
-        return None;
+        return Err("不是 http/https 链接".into());
     }
-    let resp = http::request("GET", url, &[("User-Agent", "Zhuxia-ImgBed")], None, proxy, 20_000).ok()?;
-    if !(200..300).contains(&resp.status) || resp.body.is_empty() {
-        return None;
+    let resp = http::request_limited(
+        "GET",
+        url,
+        &[("User-Agent", "Zhuxia-ImgBed")],
+        None,
+        proxy,
+        20_000,
+        max_body,
+    )?;
+    if !(200..300).contains(&resp.status) {
+        return Err(format!("HTTP {}", resp.status));
     }
-    Some(resp.body)
+    if resp.body.is_empty() {
+        return Err("响应为空".into());
+    }
+    Ok(resp.body)
 }
 
 // ---------------------------------------------------------------- 维护

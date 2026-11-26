@@ -117,6 +117,12 @@ struct Run {
     shown: Option<String>,
 }
 
+/// 手势松开后轨迹继续显示多久。提示（动作名）另有 `hint_duration_ms` 控制。
+///
+/// 220ms 是"看得清自己画了什么"和"别挡着下一步"之间的取舍：再长就像没结束，
+/// 再短会闪一下反而看不清。
+const TRAIL_FADE_MS: u32 = 220;
+
 #[derive(Default)]
 struct Machine {
     run: Option<Run>,
@@ -318,6 +324,7 @@ impl Machine {
         if run.wheel_active {
             add_end_point(&mut run.points, x, y);
             overlay::show_trail(&run.points, true);
+            overlay::fade_trail(TRAIL_FADE_MS);
             if let Some(rule) = run.pending.take() {
                 if run.hint {
                     overlay::show_hint(&rule.name);
@@ -353,11 +360,13 @@ impl Machine {
 
         let Some((rule, _)) = hit else {
             overlay::show_trail(&run.points, false);
+            overlay::fade_trail(TRAIL_FADE_MS);
             overlay::settle(run.hint_ms);
             return;
         };
 
         overlay::show_trail(&run.points, true);
+        overlay::fade_trail(TRAIL_FADE_MS);
         if run.hint {
             overlay::show_hint(&rule.name);
         }
