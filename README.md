@@ -14,7 +14,7 @@ Windows 上的常驻小工具集合：**一个后台进程**提供系统监视�
 
 八个功能模块各自独立开关：关掉的模块不占线程、不占钩子，也不写数据。
 
-<img src="https://zhuxia.ztsite.com/shots/annotate.png" alt="截图标注：工具条浮在选区上方，已画了矩形、箭头与马赛克" width="720">
+<img src="https://zhuxia.ztsite.com/shots/selection.png" alt="截图框选：选区带尺寸标尺，放大镜显示像素与颜色值，顶部是快捷键提示条" width="720">
 
 <img src="https://zhuxia.ztsite.com/shots/taskbar.png" alt="任务栏监视条：CPU、内存、磁盘、GPU 与上下行网速" width="440">
 
