@@ -55,8 +55,6 @@ desktop.ini
 !/docs/GESTURE.md
 !/docs/IMGBED.md
 !/docs/RECORD.md
-!/docs/articles/
-!/docs/articles/*.md
 
 # 内部资料：审计报告、设计稿、踩坑与实测记录。
 # 只给本地开发参考，不随仓库分发；文件仍留在磁盘上（路径 internal/）。

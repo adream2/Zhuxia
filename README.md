@@ -35,7 +35,13 @@ Windows 上的常驻小工具集合：**一个后台进程**提供系统监视�
 
 ## 快速开始
 
-1. 到 [Releases](https://github.com/adream2/Zhuxia/releases) 下载 `zhuxia-<版本>-win-x64.zip`。
+1. 下载 `zhuxia-<版本>-win-x64.zip`，两条渠道任选：
+
+   | 渠道 | 说明 |
+   | --- | --- |
+   | [GitHub Releases](https://github.com/adream2/Zhuxia/releases) | 主渠道，同时提供源码包与 `SHA256SUMS.txt` 校验和 |
+   | [夸克网盘](https://pan.quark.cn/s/b27532205232) | 国内直连较快，需要先装夸克 App；**通过这个链接保存，作者会拿到一点拉新奖励**，不影响你下载到的文件，介意就走 GitHub |
+
 2. 解压到任意目录，双击 `zhuxia.exe`。免安装，配置与日志都写在 exe 同目录。
 3. 首次启动会请求管理员权限（部分指标与防火墙规则需要），随后问两件事：任务栏窗口还是悬浮卡片、要不要用驻匣接管 `Win+V`（不接管也能用 `Alt+C` 打开剪贴板）。
 
