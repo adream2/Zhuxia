@@ -344,7 +344,11 @@ jobs:
     name: 部署宣传页
     needs: [validate, site_build]
     runs-on: ubuntu-latest
+    # 与 pages.yml 的 deploy job 保持同一组权限（那边 8 次全绿）。
+    # deploy-pages 的文档只要求 pages + id-token，但 contents: read 在 pages.yml 里
+    # 是有继承的，多给这一项零成本，没必要赌。
     permissions:
+      contents: read
       pages: write
       id-token: write
     environment:
